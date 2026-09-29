@@ -1,0 +1,16 @@
+.git
+.gitignore
+node_modules
+dist
+coverage
+test-results
+data
+backups
+.env
+.env.*
+!.env.example
+*.log
+*.db
+*.sqlite
+*.sqlite-*
+.DS_Store
