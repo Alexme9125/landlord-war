@@ -23,7 +23,6 @@ import {
   Moon,
   Pencil,
   Plus,
-  RotateCcw,
   Settings2,
   ShieldCheck,
   Sparkles,
@@ -104,11 +103,7 @@ export default function App() {
     () => saved("clear-mode", "standard") as Mode,
   );
   const [theme, setTheme] = useState<Theme>(
-    () =>
-      (saved("clear-theme", "") ||
-        (saved("clear-mode", "standard") === "wild"
-          ? "dark"
-          : "light")) as Theme,
+    () => saved("clear-theme", "light") === "dark" ? "dark" : "light",
   );
   const [account, setAccount] = useState<Account | null>(null),
     [room, setRoom] = useState<RoomView | null>(null);
@@ -164,10 +159,6 @@ export default function App() {
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", theme === "light" ? "#eaf0f4" : "#101f2c");
   }, [theme]);
-  useEffect(() => {
-    if (!saved("clear-theme", ""))
-      setTheme((room?.mode ?? mode) === "wild" ? "dark" : "light");
-  }, [mode, room?.mode]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(timer);
@@ -313,7 +304,6 @@ export default function App() {
   function changeMode(next: Mode) {
     setMode(next);
     save("clear-mode", next);
-    if (!saved("clear-theme", "")) setTheme(next === "wild" ? "dark" : "light");
   }
   function toggleTheme() {
     const next = theme === "light" ? "dark" : "light";
@@ -1243,29 +1233,11 @@ export default function App() {
             </button>
             <div className="setting-row">
               <span>
-                牌桌外观<small>独立于标准 / 癞子玩法</small>
+                牌桌外观<small>手动切换，记住你的选择</small>
               </span>
               <button className="secondary-button" onClick={toggleTheme}>
                 {theme === "light" ? <Sun size={17} /> : <Moon size={17} />}{" "}
                 {theme === "light" ? "浅色" : "深色"}
-              </button>
-            </div>
-            <div className="setting-row">
-              <span>
-                跟随玩法默认主题<small>标准浅色，癞子深色</small>
-              </span>
-              <button
-                className="text-button"
-                onClick={() => {
-                  try {
-                    localStorage.removeItem("clear-theme");
-                  } catch {}
-                  setTheme((room?.mode ?? mode) === "wild" ? "dark" : "light");
-                  setNotice("已恢复自动主题");
-                }}
-              >
-                <RotateCcw size={15} />
-                恢复
               </button>
             </div>
             <p className="settings-note">
