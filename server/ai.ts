@@ -1,11 +1,17 @@
-import type { Card, GameAction, Personality, Play } from "../shared/types.ts";
+import type {
+  Card,
+  GameAction,
+  Personality,
+  Play,
+  Wildcards,
+} from "../shared/types.ts";
 import { deck } from "../shared/cards.ts";
 import { beats, bombLevel, legalMoves, playName } from "../shared/rules.ts";
 
 /** Everything the computer is allowed to know. In particular, no other hand is accepted. */
 export interface AiObservation {
   hand: Card[];
-  wildRank: number | null;
+  wildRank: Wildcards;
   seat: number;
   landlord: number;
   counts: number[];
@@ -59,7 +65,7 @@ const ranks = (cards: Card[]) => {
   return count;
 };
 
-function strength(hand: Card[], wild: number | null): number {
+function strength(hand: Card[], wild: Wildcards): number {
   const c = ranks(hand);
   let value = c[17] * 4.1 + c[16] * 3.1 + c[15] * 1.5 + c[14] * 0.7;
   for (let r = 3; r <= 15; r++) {
@@ -72,7 +78,8 @@ function strength(hand: Card[], wild: number | null): number {
     run = c[r] ? run + 1 : 0;
     if (run === 5) value += 0.8;
   }
-  if (wild !== null) value += c[wild] * 0.9;
+  const wildRanks = typeof wild === "number" ? [wild] : (wild ?? []);
+  for (const rank of new Set(wildRanks)) value += c[rank] * 0.9;
   return value;
 }
 
@@ -348,6 +355,8 @@ export function chooseAction(
         type: "play",
         cardIds: winning.cards.map((c) => c.id),
         as: winning.as,
+        kind: winning.kind,
+        main: winning.main,
       },
       explanation: "这手牌可以直接出完，选择收尾。",
     };
@@ -403,7 +412,13 @@ export function chooseAction(
           ? `用${playName(best)}接牌，争取继续出牌。`
           : `先出${playName(best)}，整理剩余手牌。`;
   return {
-    action: { type: "play", cardIds: best.cards.map((c) => c.id), as: best.as },
+    action: {
+      type: "play",
+      cardIds: best.cards.map((c) => c.id),
+      as: best.as,
+      kind: best.kind,
+      main: best.main,
+    },
     explanation,
   };
 }

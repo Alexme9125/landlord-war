@@ -1,5 +1,5 @@
 import { randomInt, randomUUID } from "node:crypto";
-import { deck } from "../shared/cards.ts";
+import { deck, gameWildRanks } from "../shared/cards.ts";
 import { createGame, applyAction, forfeit } from "../shared/engine.ts";
 import { playName } from "../shared/rules.ts";
 import { parseBaseStake, type BaseStake } from "../shared/types.ts";
@@ -54,6 +54,25 @@ function shuffled() {
     [cards[i], cards[j]] = [cards[j], cards[i]];
   }
   return cards;
+}
+function newGame(room: Room, id: string, first: number) {
+  const wildRank = room.mode === "standard" ? null : randomInt(3, 16);
+  const alternatives = Array.from({ length: 13 }, (_, i) => i + 3).filter(
+    (rank) => rank !== wildRank,
+  );
+  const heavenRank =
+    room.mode === "heaven-earth"
+      ? alternatives[randomInt(alternatives.length)]
+      : null;
+  return createGame(
+    id,
+    room.mode,
+    shuffled(),
+    first,
+    wildRank,
+    room.baseStake,
+    heavenRank,
+  );
 }
 
 export class Rooms {
@@ -208,14 +227,7 @@ export class Rooms {
     });
     room.result = null;
     room.completedReplay = null;
-    room.game = createGame(
-      randomUUID(),
-      room.mode,
-      shuffled(),
-      randomInt(3),
-      room.mode === "wild" ? randomInt(3, 16) : null,
-      room.baseStake,
-    );
+    room.game = newGame(room, randomUUID(), randomInt(3));
     room.disconnected.clear();
     this.resetTimer(room);
     this.changed(room);
@@ -317,14 +329,7 @@ export class Rooms {
     room.game = next;
     if (explanation && emitted) emitted.explanation = explanation;
     if (next.phase === "redeal") {
-      room.game = createGame(
-        next.id,
-        room.mode,
-        shuffled(),
-        (next.bidding.first + 1) % 3,
-        room.mode === "wild" ? randomInt(3, 16) : null,
-        next.baseStake,
-      );
+      room.game = newGame(room, next.id, (next.bidding.first + 1) % 3);
     }
     if (next.phase === "finished") {
       try {
@@ -408,7 +413,7 @@ export class Rooms {
     const g = room.game!;
     return {
       hand: g.hands[seat],
-      wildRank: g.phase === "bidding" ? null : g.wildRank,
+      wildRank: g.landlord < 0 ? g.heavenRank : gameWildRanks(g),
       seat,
       landlord: g.landlord,
       counts: g.hands.map((h) => h.length),
@@ -538,6 +543,7 @@ export class Rooms {
             hand: mySeat >= 0 ? g.hands[mySeat] : [],
             bottom: g.landlord < 0 ? [] : g.bottom,
             wildRank: g.landlord < 0 ? null : g.wildRank,
+            heavenRank: g.heavenRank,
             multiplier: g.multiplier,
             multiplierEvents: g.multiplierEvents,
             trick: g.trick,

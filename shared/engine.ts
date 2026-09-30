@@ -1,7 +1,14 @@
 import type { Card, GameAction, GameState, Mode, Play } from "./types.ts";
 import { parseBaseStake, type BaseStake } from "./types.ts";
-import { sortCards } from "./cards.ts";
-import { beats, bombLevel, bottomBonus, interpret, playName } from "./rules.ts";
+import { gameWildRanks, sortCards } from "./cards.ts";
+import {
+  beats,
+  bombFactor,
+  bombLevel,
+  bottomBonus,
+  interpret,
+  playName,
+} from "./rules.ts";
 
 export function createGame(
   id: string,
@@ -10,9 +17,19 @@ export function createGame(
   first: number,
   wildRank: number | null,
   baseStake: BaseStake = 10,
+  heavenRank: number | null = null,
 ): GameState {
   if (shuffled.length !== 54 || new Set(shuffled.map((c) => c.id)).size !== 54)
     throw new Error("牌组无效");
+  const validWild = (rank: number | null) =>
+    rank !== null && Number.isInteger(rank) && rank >= 3 && rank <= 15;
+  if (mode !== "standard" && !validWild(wildRank))
+    throw new Error("癞子点数无效");
+  if (
+    mode === "heaven-earth" &&
+    (!validWild(heavenRank) || heavenRank === wildRank)
+  )
+    throw new Error("天地癞子必须是两个不同的非王点数");
   const hands = [0, 1, 2].map((seat) =>
     sortCards(shuffled.slice(seat * 17, seat * 17 + 17)),
   );
@@ -24,7 +41,8 @@ export function createGame(
     hands,
     initialHands: structuredClone(hands),
     bottom: shuffled.slice(51),
-    wildRank: mode === "wild" ? wildRank : null,
+    wildRank: mode !== "standard" ? wildRank : null,
+    heavenRank: mode === "heaven-earth" ? heavenRank : null,
     landlord: -1,
     turn: first,
     doubles: [null, null, null],
@@ -172,8 +190,15 @@ export function applyAction(
     const hand = g.hands[seat],
       cards = action.cardIds.map((id) => hand.find((c) => c.id === id));
     if (cards.some((c) => !c)) throw new Error("所选牌不在你的手中");
-    const candidates = interpret(cards as Card[], g.wildRank, action.as).filter(
-      (p) => beats(p, g.trick?.play ?? null),
+    const candidates = interpret(
+      cards as Card[],
+      gameWildRanks(g),
+      action.as,
+    ).filter(
+      (p) =>
+        beats(p, g.trick?.play ?? null) &&
+        (action.kind === undefined || action.kind === p.kind) &&
+        (action.main === undefined || action.main === p.main),
     );
     if (!candidates.length) throw new Error("牌型无效或不能压过上一手");
     if (!action.as && candidates.length > 1)
@@ -184,11 +209,7 @@ export function applyAction(
     g.trick = { seat, play };
     g.passes = 0;
     if (bombLevel(play))
-      multiply(
-        g,
-        g.mode === "wild" && play.kind !== "softBomb" ? 4 : 2,
-        playName(play).split(" · ")[0],
-      );
+      multiply(g, bombFactor(g.mode, play), playName(play).split(" · ")[0]);
     event(g, seat, "play", playName(play), play);
     if (!g.hands[seat].length) {
       g.winner = seat === g.landlord ? "landlord" : "farmers";

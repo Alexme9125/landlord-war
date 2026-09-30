@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chooseAction, type AiObservation } from "../server/ai.ts";
-import { deck } from "../shared/cards.ts";
+import { deck, gameWildRanks } from "../shared/cards.ts";
 import { applyAction, createGame } from "../shared/engine.ts";
 import { beats, interpret, legalMoves } from "../shared/rules.ts";
 import type {
@@ -29,9 +29,18 @@ const example = (overrides: Partial<AiObservation> = {}): AiObservation => ({
 });
 
 function observed(g: GameState, seat: number): AiObservation {
+  // The earth rank is hidden until a landlord has been chosen.
+  const wildRank =
+    g.mode === "heaven-earth"
+      ? g.landlord < 0
+        ? g.heavenRank === null
+          ? []
+          : [g.heavenRank]
+        : gameWildRanks(g)
+      : g.wildRank;
   return {
     hand: g.hands[seat],
-    wildRank: g.wildRank,
+    wildRank,
     seat,
     landlord: g.landlord,
     counts: g.hands.map((h) => h.length),
@@ -71,7 +80,11 @@ describe("computer opponent", () => {
           lead.hand.find((c) => c.id === id)!,
         );
         expect(selected.every(Boolean)).toBe(true);
-        expect(interpret(selected, null, chosen.as).length).toBeGreaterThan(0);
+        expect(
+          interpret(selected, null, chosen.as).some(
+            (p) => p.kind === chosen.kind && p.main === chosen.main,
+          ),
+        ).toBe(true);
       }
       const previous: Play = interpret(cards(["3C"]), null)[0];
       const response = chooseAction(
@@ -83,8 +96,11 @@ describe("computer opponent", () => {
           lead.hand.find((c) => c.id === id)!,
         );
         expect(
-          interpret(selected, null, response.as).some((p) =>
-            beats(p, previous),
+          interpret(selected, null, response.as).some(
+            (p) =>
+              p.kind === response.kind &&
+              p.main === response.main &&
+              beats(p, previous),
           ),
         ).toBe(true);
       } else expect(response.type).toBe("pass");
@@ -109,7 +125,12 @@ describe("computer opponent", () => {
       expect(action.as).toHaveLength(selected.length);
       expect(action.as).toEqual([6, 6]);
       expect(
-        interpret(selected, 7, action.as).some((p) => beats(p, previous)),
+        interpret(selected, 7, action.as).some(
+          (p) =>
+            p.kind === action.kind &&
+            p.main === action.main &&
+            beats(p, previous),
+        ),
       ).toBe(true);
     }
   });
@@ -223,18 +244,172 @@ describe("computer opponent", () => {
     }
   });
 
-  it("completes six seeded standard and wild games through the engine", () => {
+  it("keeps the earth rank out of bidding observations until landlord assignment", () => {
+    const g = createGame("hidden-earth", "heaven-earth", deck(), 0, 7, 10, 8);
+    g.hands[0] = cards(["7S", "7H", "7C", "7D", "14S"]);
+    expect(observed(g, 0).wildRank).toEqual([8]);
+    expect(chooseAction(observed(g, 0), "balanced").action).toEqual({
+      type: "bid",
+      yes: false,
+    });
+    g.landlord = 0;
+    expect(observed(g, 0).wildRank).toEqual([8, 7]);
+    expect(chooseAction(observed(g, 0), "balanced").action).toEqual({
+      type: "bid",
+      yes: true,
+    });
+  });
+
+  it("uses the full eight-card mixed bomb to win over a seven-card bomb", () => {
+    const wild = [7, 8];
+    const hand = cards(["7S", "7H", "7C", "7D", "8S", "8H", "8C", "8D"]);
+    const previous = interpret(hand.slice(0, 7), wild).find(
+      (p) => p.kind === "mixedWildBomb",
+    )!;
+    expect(previous).toBeDefined();
+    const obs = example({
+      hand,
+      wildRank: wild,
+      counts: [8, 2, 5],
+      trick: { seat: 1, play: previous },
+    });
+    for (const personality of personalities) {
+      const action = chooseAction(obs, personality).action;
+      expect(action.type).toBe("play");
+      if (action.type !== "play") continue;
+      expect(action.cardIds).toHaveLength(8);
+      expect(action.as).toHaveLength(8);
+      expect(action.kind).toBe("mixedWildBomb");
+      const selected = action.cardIds.map((id) =>
+        hand.find((c) => c.id === id)!,
+      );
+      expect(
+        interpret(selected, wild, action.as).some(
+          (p) =>
+            p.kind === action.kind &&
+            p.main === action.main &&
+            beats(p, previous),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it("responds with the only legal long bomb and keeps its explicit assignment", () => {
+    const wild = [7, 8];
+    const hand = cards(["7S", "7H", "7C", "7D", "8S", "8H", "8C", "8D", "16J"]);
+    const previous = interpret(hand.slice(0, 7), wild).find(
+      (p) => p.kind === "mixedWildBomb",
+    )!;
+    const obs = example({
+      hand,
+      wildRank: wild,
+      seat: 0,
+      landlord: 1,
+      counts: [9, 2, 5],
+      trick: { seat: 1, play: previous },
+    });
+    const moves = legalMoves(hand, wild, previous);
+    expect(moves).toHaveLength(1);
+    for (const personality of personalities) {
+      const action = chooseAction(obs, personality).action;
+      expect(action.type).toBe("play");
+      if (action.type !== "play") continue;
+      expect(action.kind).toBe("mixedWildBomb");
+      expect(action.as).toHaveLength(8);
+      const selected = action.cardIds.map((id) =>
+        hand.find((c) => c.id === id)!,
+      );
+      expect(
+        interpret(selected, wild, action.as).some(
+          (p) =>
+            p.kind === action.kind &&
+            p.main === action.main &&
+            beats(p, previous),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it("bounds an eight-wildcard decision with thousands of candidates", () => {
+    const hand = deck().filter(
+      (c) =>
+        c.rank === 7 ||
+        c.rank === 8 ||
+        ([3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15].includes(c.rank) &&
+          c.suit === "S") ||
+        (c.rank === 3 && c.suit === "H"),
+    );
+    const wild = [7, 8];
+    expect(hand).toHaveLength(20);
+    expect(legalMoves(hand, wild).length).toBeGreaterThan(320);
+    const obs = example({ hand, wildRank: wild, counts: [20, 17, 17] });
+    const started = performance.now();
+    const action = chooseAction(obs, "balanced").action;
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(action.type).toBe("play");
+    if (action.type !== "play") return;
+    const selected = action.cardIds.map((id) => hand.find((c) => c.id === id)!);
+    expect(action.as).toHaveLength(selected.length);
+    expect(
+      interpret(selected, wild, action.as).some(
+        (p) => p.kind === action.kind && p.main === action.main,
+      ),
+    ).toBe(true);
+  });
+
+  it("finds an eight-wildcard finish beyond the 320-candidate scoring cap", () => {
+    const hand = deck().filter(
+      (c) =>
+        c.rank === 7 ||
+        c.rank === 8 ||
+        ([6, 10, 11, 14].includes(c.rank) && c.suit !== "D"),
+    );
+    const wild = [7, 8];
+    const moves = legalMoves(hand, wild);
+    expect(
+      moves.findIndex((p) => p.cards.length === hand.length),
+    ).toBeGreaterThan(320);
+    const obs = example({ hand, wildRank: wild, counts: [20, 17, 17] });
+    for (const personality of personalities) {
+      const action = chooseAction(obs, personality).action;
+      expect(action.type).toBe("play");
+      if (action.type !== "play") continue;
+      expect(action.cardIds).toHaveLength(20);
+      const selected = action.cardIds.map((id) =>
+        hand.find((c) => c.id === id)!,
+      );
+      expect(
+        interpret(selected, wild, action.as).some(
+          (p) => p.kind === action.kind && p.main === action.main,
+        ),
+      ).toBe(true);
+      const g = createGame("long-finish", "heaven-earth", deck(), 0, 7, 10, 8);
+      g.phase = "playing";
+      g.landlord = 0;
+      g.turn = 0;
+      g.hands[0] = hand;
+      expect(applyAction(g, 0, action).phase).toBe("finished");
+    }
+  });
+
+  it("completes seeded standard, wild, and heaven-earth games through the engine", () => {
     let completed = 0,
-      decisions = 0,
-      largestDecisionMs = 0;
-    for (const mode of ["standard", "wild"] as Mode[]) {
+      decisions = 0;
+    const largestDecisionMs: Record<Mode, number> = {
+      standard: 0,
+      wild: 0,
+      "heaven-earth": 0,
+    };
+    for (const mode of ["standard", "wild", "heaven-earth"] as Mode[]) {
       for (let match = 0; match < 3; match++) {
         let g = createGame(
           `${mode}-${match}`,
           mode,
           shuffle(7100 + match * 83 + (mode === "wild" ? 401 : 0)),
           match,
-          mode === "wild" ? 7 + match : null,
+          mode === "standard" ? null : 7 + match,
+          10,
+          mode === "heaven-earth" ? 9 + match : null,
         );
         // All-pass deals are replayed with the next deterministic shuffle.
         for (let redeals = 0; g.phase === "redeal" && redeals < 10; redeals++)
@@ -243,7 +418,9 @@ describe("computer opponent", () => {
             mode,
             shuffle(9000 + redeals + match * 19),
             match,
-            mode === "wild" ? 7 + match : null,
+            mode === "standard" ? null : 7 + match,
+            10,
+            mode === "heaven-earth" ? 9 + match : null,
           );
         let steps = 0;
         while (g.phase !== "finished" && steps < 220) {
@@ -253,7 +430,9 @@ describe("computer opponent", () => {
               mode,
               shuffle(12000 + steps + match * 47),
               match,
-              mode === "wild" ? 7 + match : null,
+              mode === "standard" ? null : 7 + match,
+              10,
+              mode === "heaven-earth" ? 9 + match : null,
             );
             continue;
           }
@@ -264,8 +443,8 @@ describe("computer opponent", () => {
           const obs = observed(g, seat);
           const started = performance.now();
           const choice = chooseAction(obs, personalities[seat]);
-          largestDecisionMs = Math.max(
-            largestDecisionMs,
+          largestDecisionMs[mode] = Math.max(
+            largestDecisionMs[mode],
             performance.now() - started,
           );
           expect(choice.explanation.length).toBeGreaterThan(0);
@@ -280,8 +459,10 @@ describe("computer opponent", () => {
         completed++;
       }
     }
-    expect(completed).toBe(6);
+    expect(completed).toBe(9);
     expect(decisions).toBeGreaterThan(60);
-    expect(largestDecisionMs).toBeLessThan(200);
-  }, 30_000);
+    expect(largestDecisionMs.standard).toBeLessThan(200);
+    expect(largestDecisionMs.wild).toBeLessThan(200);
+    expect(largestDecisionMs["heaven-earth"]).toBeLessThan(1000);
+  }, 60_000);
 });

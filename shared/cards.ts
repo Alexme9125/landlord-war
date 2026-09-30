@@ -1,4 +1,14 @@
-import type { Card, Suit } from "./types.ts";
+import type { Card, Suit, Wildcards } from "./types.ts";
+export const isWildRank = (rank: number, wild: Wildcards) =>
+  typeof wild === "number" ? rank === wild : !!wild?.includes(rank);
+export function gameWildRanks(game: {
+  wildRank: number | null;
+  heavenRank?: number | null;
+}): number[] {
+  return [game.heavenRank, game.wildRank].filter(
+    (rank): rank is number => rank != null,
+  );
+}
 export const rankText = (rank: number) =>
   ({ 11: "J", 12: "Q", 13: "K", 14: "A", 15: "2", 16: "小王", 17: "大王" })[
     rank

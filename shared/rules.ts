@@ -1,5 +1,5 @@
-import type { Card, Play, PlayKind } from "./types.ts";
-import { rankText } from "./cards.ts";
+import type { Card, Mode, Play, PlayKind, Wildcards } from "./types.ts";
+import { isWildRank, rankText } from "./cards.ts";
 
 const names: Record<PlayKind, string> = {
   single: "单张",
@@ -17,17 +17,34 @@ const names: Record<PlayKind, string> = {
   softBomb: "软炸弹",
   bomb: "炸弹",
   wildBomb: "纯癞子炸弹",
+  mixedWildBomb: "混合癞子炸弹",
   rocket: "王炸",
 };
 export const playName = (p: Play) =>
-  `${names[p.kind]}${p.kind === "rocket" ? "" : " · " + rankText(p.main)}`;
+  `${bombLevel(p) && p.cards.length > 4 ? p.cards.length + "张" : ""}${names[p.kind]}${p.kind === "rocket" || p.kind === "mixedWildBomb" ? "" : " · " + rankText(p.main)}`;
 const bombLevels: Partial<Record<PlayKind, number>> = {
   softBomb: 1,
   bomb: 2,
-  wildBomb: 3,
-  rocket: 4,
+  mixedWildBomb: 3,
+  wildBomb: 4,
+  rocket: 100,
 };
-export const bombLevel = (p: Play) => bombLevels[p.kind] ?? 0;
+export const bombLevel = (p: Play) => {
+  const tier = bombLevels[p.kind] ?? 0;
+  return tier && p.kind !== "rocket" ? (p.cards.length - 4) * 4 + tier : tier;
+};
+export function bombFactor(mode: Mode, play: Play): number {
+  if (!bombLevel(play)) return 1;
+  if (mode === "standard") return 2;
+  if (
+    mode === "heaven-earth" &&
+    (play.cards.length > 4 || play.kind === "rocket")
+  )
+    return 6;
+  return play.kind === "softBomb" ? 2 : 4;
+}
+const dualWild = (wild: Wildcards) =>
+  typeof wild !== "number" && !!wild && new Set(wild).size === 2;
 export function beats(p: Play, previous: Play | null): boolean {
   if (!previous) return true;
   const a = bombLevel(p),
@@ -48,7 +65,7 @@ const counts = (ranks: number[]) => {
 const consecutive = (r: number[]) =>
   r.every((v, i) => v <= 14 && (i === 0 || v === r[i - 1] + 1));
 
-function classify(cards: Card[], as: number[], wild: number | null): Play[] {
+function classify(cards: Card[], as: number[], wild: Wildcards): Play[] {
   const n = cards.length,
     c = counts(as),
     ranks = [...c.keys()].sort((a, b) => a - b),
@@ -60,11 +77,11 @@ function classify(cards: Card[], as: number[], wild: number | null): Play[] {
   if (c.size === 1) {
     if (n === 2 && ranks[0] <= 15) add("pair", ranks[0]);
     if (n === 3 && ranks[0] <= 15) add("triple", ranks[0]);
-    if (n === 4 && ranks[0] <= 15)
+    if ((n === 4 || (dualWild(wild) && n >= 5 && n <= 12)) && ranks[0] <= 15)
       add(
-        cards.every((x) => x.rank === wild)
+        cards.every((x) => isWildRank(x.rank, wild))
           ? "wildBomb"
-          : cards.some((x) => x.rank === wild)
+          : cards.some((x) => isWildRank(x.rank, wild))
             ? "softBomb"
             : "bomb",
         ranks[0],
@@ -130,7 +147,7 @@ function classify(cards: Card[], as: number[], wild: number | null): Play[] {
 /** Enumerate distinct legal interpretations of selected physical cards. Explicit assignments never get silently replaced. */
 export function interpret(
   cards: Card[],
-  wild: number | null = null,
+  wild: Wildcards = null,
   explicit?: number[],
 ): Play[] {
   if (
@@ -139,43 +156,160 @@ export function interpret(
     new Set(cards.map((c) => c.id)).size !== cards.length
   )
     return [];
-  const indexes = cards.flatMap((c, i) => (c.rank === wild ? [i] : []));
+  const indexes = cards.flatMap((c, i) =>
+    isWildRank(c.rank, wild) ? [i] : [],
+  );
+  const natural = cards.map((c) => c.rank);
+  const allWild = indexes.length === cards.length;
+  const mixedBomb =
+    allWild &&
+    dualWild(wild) &&
+    cards.length >= 4 &&
+    cards.length <= 8 &&
+    new Set(natural).size === 2
+      ? {
+          cards,
+          as: natural.map(() => Math.max(...natural)),
+          kind: "mixedWildBomb" as const,
+          main: Math.max(...natural),
+          chain: 1,
+        }
+      : null;
   if (explicit) {
     if (
       explicit.length !== cards.length ||
       explicit.some(
         (r, i) =>
           !Number.isInteger(r) ||
-          (cards[i].rank === wild ? r < 3 || r > 15 : r !== cards[i].rank),
+          (isWildRank(cards[i].rank, wild)
+            ? r < 3 || r > 15
+            : r !== cards[i].rank),
       )
     )
       return [];
-    if (
-      indexes.length === cards.length &&
-      explicit.some((r, i) => r !== cards[i].rank)
-    )
-      return [];
+    if (allWild && explicit.some((r, i) => r !== cards[i].rank))
+      return mixedBomb && explicit.every((r, i) => r === mixedBomb.as[i])
+        ? [mixedBomb]
+        : [];
     return classify(cards, explicit, wild);
   }
-  if (!indexes.length || indexes.length === cards.length)
-    return classify(
-      cards,
-      cards.map((c) => c.rank),
-      wild,
+  if (!indexes.length || allWild)
+    return [
+      ...classify(cards, natural, wild),
+      ...(mixedBomb ? [mixedBomb] : []),
+    ];
+
+  // Match complete legal patterns, instead of enumerating 13^8 wildcard assignments.
+  // Wing ranks never affect a play's strength, so retain one natural-first assignment
+  // per kind/body. Every explicit assignment is still independently accepted above.
+  const n = cards.length;
+  const fixed = counts(
+    cards.filter((c) => !isWildRank(c.rank, wild)).map((c) => c.rank),
+  );
+  const wildCounts = counts(indexes.map((i) => cards[i].rank));
+  const results: Play[] = [];
+  const target = (ranks: number[]) => {
+    if (ranks.length !== n) return;
+    const needed = counts(ranks);
+    for (const [rank, count] of fixed) {
+      if ((needed.get(rank) ?? 0) < count) return;
+      needed.set(rank, needed.get(rank)! - count);
+    }
+    if ([...needed].some(([rank, count]) => rank > 15 && count > 0)) return;
+    const as = [...natural];
+    const remaining: number[] = [];
+    for (const i of indexes) {
+      if ((needed.get(cards[i].rank) ?? 0) > 0)
+        needed.set(cards[i].rank, needed.get(cards[i].rank)! - 1);
+      else remaining.push(i);
+    }
+    const missing = [...needed].flatMap(([rank, count]) =>
+      Array<number>(count).fill(rank),
     );
-  const as = cards.map((c) => c.rank),
-    results: Play[] = [];
-  const visit = (i: number, min: number) => {
-    if (i === indexes.length) {
-      results.push(...classify(cards, [...as], wild));
-      return;
-    }
-    for (let r = min; r <= 15; r++) {
-      as[indexes[i]] = r;
-      visit(i + 1, r);
-    }
+    if (missing.length !== remaining.length) return;
+    remaining.forEach((i, index) => {
+      as[i] = missing[index];
+    });
+    results.push(...classify(cards, as, wild));
   };
-  visit(0, 3);
+  const attach = (body: number[], wingCount: number, unit: 1 | 2) => {
+    if (body.length + wingCount * unit !== n) return;
+    const core = counts(body);
+    for (const [rank, count] of core)
+      if ((fixed.get(rank) ?? 0) > count) return;
+    const wings = new Map([...fixed].filter(([rank]) => !core.has(rank)));
+    if (unit === 1) {
+      if (
+        [...wings.values()].some((count) => count > 3) ||
+        (wings.has(16) && wings.has(17))
+      )
+        return;
+      let left = wingCount - [...wings.values()].reduce((a, b) => a + b, 0);
+      if (left < 0) return;
+      const add = (rank: number, available: number) => {
+        if (core.has(rank)) return;
+        const taken = Math.min(left, available, 3 - (wings.get(rank) ?? 0));
+        if (taken > 0) {
+          wings.set(rank, (wings.get(rank) ?? 0) + taken);
+          left -= taken;
+        }
+      };
+      for (const [rank, count] of wildCounts) add(rank, count);
+      for (let rank = 3; rank <= 15 && left; rank++) add(rank, left);
+      if (left) return;
+    } else {
+      if (
+        wings.size > wingCount ||
+        [...wings].some(([rank, count]) => rank > 15 || count > 2)
+      )
+        return;
+      for (const rank of wings.keys()) wings.set(rank, 2);
+      const candidates = Array.from({ length: 13 }, (_, i) => i + 3).filter(
+        (rank) => !core.has(rank) && !wings.has(rank),
+      );
+      candidates.sort(
+        (a, b) =>
+          Math.min(2, wildCounts.get(b) ?? 0) -
+            Math.min(2, wildCounts.get(a) ?? 0) || a - b,
+      );
+      for (const rank of candidates) {
+        if (wings.size === wingCount) break;
+        wings.set(rank, 2);
+      }
+      if (wings.size !== wingCount) return;
+    }
+    target([
+      ...body,
+      ...[...wings].flatMap(([rank, count]) => Array<number>(count).fill(rank)),
+    ]);
+  };
+  for (let rank = 3; rank <= 15; rank++) {
+    if (n === 2 || n === 3 || n === 4 || (dualWild(wild) && n <= 12))
+      target(Array<number>(n).fill(rank));
+    attach([rank, rank, rank], 1, 1);
+    attach([rank, rank, rank], 1, 2);
+    attach([rank, rank, rank, rank], 2, 1);
+    attach([rank, rank, rank, rank], 2, 2);
+  }
+  for (const unit of [1, 2, 3]) {
+    const minimum = unit === 1 ? 5 : unit === 2 ? 3 : 2;
+    for (
+      let length = minimum;
+      length <= Math.min(12, Math.floor(n / unit));
+      length++
+    ) {
+      for (let start = 3; start + length - 1 <= 14; start++) {
+        const body = Array.from({ length }, (_, i) =>
+          Array<number>(unit).fill(start + i),
+        ).flat();
+        if (body.length === n) target(body);
+        if (unit === 3) {
+          attach(body, length, 1);
+          attach(body, length, 2);
+        }
+      }
+    }
+  }
   const naturalCost = (p: Play) =>
     p.as.filter((r, i) => r !== cards[i].rank).length;
   results.sort(
@@ -186,7 +320,7 @@ export function interpret(
   );
   const seen = new Set<string>();
   return results.filter((p) => {
-    const key = `${p.kind}:${p.main}:${p.chain}:${[...p.as].sort((a, b) => a - b)}`;
+    const key = `${p.kind}:${p.main}:${p.chain}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -196,17 +330,18 @@ export function interpret(
 function realize(
   hand: Card[],
   ranks: number[],
-  wild: number | null,
+  wild: Wildcards,
 ): { cards: Card[]; as: number[] } | null {
   const cards: Card[] = [],
     as: number[] = [],
     remaining = [...hand];
   // Reserve wildcards required at their natural rank before substituting others.
   for (const r of [...ranks].sort(
-    (a, b) => Number(b === wild) - Number(a === wild),
+    (a, b) => Number(isWildRank(b, wild)) - Number(isWildRank(a, wild)),
   )) {
     let i = remaining.findIndex((c) => c.rank === r);
-    if (i < 0 && r <= 15) i = remaining.findIndex((c) => c.rank === wild);
+    if (i < 0 && r <= 15)
+      i = remaining.findIndex((c) => isWildRank(c.rank, wild));
     if (i < 0) return null;
     cards.push(remaining.splice(i, 1)[0]);
     as.push(r);
@@ -217,7 +352,7 @@ function realize(
 /** Candidate generator for hints/search; bounded wing enumeration, all candidates independently validated. */
 export function legalMoves(
   hand: Card[],
-  wild: number | null = null,
+  wild: Wildcards = null,
   previous: Play | null = null,
 ): Play[] {
   const out: Play[] = [],
@@ -239,7 +374,30 @@ export function legalMoves(
   for (const c of hand) add({ cards: [c], as: [c.rank] });
   add(realize(hand, [16, 17], wild), "rocket");
   for (let r = 3; r <= 15; r++)
-    for (const n of [2, 3, 4]) add(realize(hand, Array(n).fill(r), wild));
+    for (let n = 2; n <= (dualWild(wild) ? Math.min(12, hand.length) : 4); n++)
+      add(realize(hand, Array(n).fill(r), wild));
+  if (dualWild(wild)) {
+    const groups = [
+      ...new Set(
+        hand.filter((c) => isWildRank(c.rank, wild)).map((c) => c.rank),
+      ),
+    ].map((rank) => hand.filter((c) => c.rank === rank));
+    if (groups.length === 2)
+      for (let a = 1; a <= groups[0].length; a++)
+        for (let b = 1; b <= groups[1].length; b++) {
+          if (a + b < 4) continue;
+          const cards = [...groups[0].slice(0, a), ...groups[1].slice(0, b)];
+          add(
+            {
+              cards,
+              as: cards.map(() =>
+                Math.max(groups[0][0].rank, groups[1][0].rank),
+              ),
+            },
+            "mixedWildBomb",
+          );
+        }
+  }
   const attach = (
     body: number[],
     wingCount: number,

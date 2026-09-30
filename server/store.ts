@@ -5,6 +5,8 @@ import { DatabaseSync } from "node:sqlite";
 import type { Account, SettlementLine } from "../shared/types.js";
 import {
   parseBaseStake,
+  MODES,
+  type Mode,
   type BaseStake,
   type ReliefChallenge,
 } from "../shared/types.ts";
@@ -17,7 +19,7 @@ const RELIEF_LIFETIME_MS = 5 * 60 * 1000;
 
 type SettlementInput = {
   id: string;
-  mode: "standard" | "wild";
+  mode: Mode;
   kind: "pve" | "pvp";
   landlord: number;
   winner: "landlord" | "farmers";
@@ -341,7 +343,7 @@ export class Store {
         input.players.length !== 3 ||
         ![0, 1, 2].includes(input.landlord) ||
         input.doubles.length !== 3 ||
-        !["standard", "wild"].includes(input.mode) ||
+        !MODES.includes(input.mode) ||
         !["pve", "pvp"].includes(input.kind) ||
         !["landlord", "farmers"].includes(input.winner) ||
         new Set(input.players.map((p) => p.id)).size !== 3

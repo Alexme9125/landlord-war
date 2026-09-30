@@ -392,6 +392,7 @@ svg {
   gap: 7px;
   color: var(--muted);
   background: transparent;
+  white-space: nowrap;
 }
 .mode-selector .selected-mode {
   background: var(--panel-solid);
@@ -529,6 +530,7 @@ svg {
   top: 100px;
   left: 50%;
   transform: translateX(-50%);
+  transform-origin: top center;
 }
 .hero-card {
   position: absolute;
@@ -1102,7 +1104,7 @@ svg {
 }
 .wild-indicator {
   position: absolute;
-  top: 63px;
+  top: calc(100% + 4px);
   left: 50%;
   transform: translateX(-50%);
   color: var(--gold);
@@ -1116,6 +1118,15 @@ svg {
 .wild-indicator b {
   margin-left: 5px;
   font-size: 12px;
+}
+.heaven-earth-indicator {
+  display: flex;
+  gap: 12px;
+  white-space: nowrap;
+}
+.heaven-earth-indicator > span + span {
+  border-left: 1px solid var(--line);
+  padding-left: 12px;
 }
 .seat {
   position: absolute;
@@ -2208,8 +2219,7 @@ svg {
     min-height: 509px;
   }
   .hero-fan {
-    scale: 0.88;
-    transform: translateX(-57%);
+    transform: translateX(-50%) scale(0.88);
     top: 120px;
   }
   .hero-glass {
@@ -2486,8 +2496,7 @@ svg {
   }
   .hero-fan {
     top: 27px;
-    scale: 0.69;
-    transform: translateX(-72.5%);
+    transform: translateX(-50%) scale(0.69);
     height: 230px;
   }
   .hero-glass {
@@ -2680,7 +2689,6 @@ svg {
     width: 11px;
   }
   .wild-indicator {
-    top: 46px;
     font-size: 8px;
     padding: 2px 7px;
   }
@@ -3098,8 +3106,7 @@ svg {
   }
   .hero-fan {
     top: 17px;
-    scale: 0.63;
-    transform: translateX(-79%);
+    transform: translateX(-50%) scale(0.63);
   }
   .hero-glass {
     top: 95px;
@@ -3257,7 +3264,6 @@ svg {
     font-size: 7px;
   }
   .wild-indicator {
-    top: 36px;
     font-size: 7px;
   }
   .seat-left,
@@ -3497,6 +3503,9 @@ svg {
   pointer-events: none;
   animation: multiplier-cue 3s both;
 }
+.game-stage:has(.wild-indicator) .multiplier-cue {
+  top: 108px;
+}
 @keyframes table-ripple {
   0% {
     transform: translate(-50%, -50%) scale(0.5);
@@ -3528,8 +3537,8 @@ svg {
     font-size: 8px;
     padding: 4px 9px;
   }
-  .wild-indicator ~ .multiplier-cue {
-    top: 65px;
+  .game-stage:has(.wild-indicator) .multiplier-cue {
+    top: 88px;
   }
 }
 @media (max-height: 540px) and (orientation: landscape) {
@@ -3562,6 +3571,9 @@ svg {
   .multiplier-cue {
     top: 37px;
     font-size: 8px;
+  }
+  .game-stage:has(.wild-indicator) .multiplier-cue {
+    top: 75px;
   }
   .waiting-stage {
     height: 212px;

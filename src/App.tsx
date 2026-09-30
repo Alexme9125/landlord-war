@@ -46,8 +46,19 @@ import type {
   RoomView,
   ReliefChallenge,
 } from "../shared/types.ts";
-import { BASE_STAKES, PERSONALITIES } from "../shared/types.ts";
-import { formatTokens, rankText, sortCards } from "../shared/cards.ts";
+import {
+  BASE_STAKES,
+  MODES,
+  MODE_NAMES,
+  PERSONALITIES,
+} from "../shared/types.ts";
+import {
+  formatTokens,
+  gameWildRanks,
+  isWildRank,
+  rankText,
+  sortCards,
+} from "../shared/cards.ts";
 import { beats, bombLevel, interpret, playName } from "../shared/rules.ts";
 import { CardFace, Hand, Modal } from "./components.tsx";
 
@@ -112,9 +123,10 @@ const heroCards: Card[] = [
 
 export default function App() {
   const [baseStake, setBaseStake] = useState<BaseStake>(10);
-  const [mode, setMode] = useState<Mode>(
-    () => saved("clear-mode", "standard") as Mode,
-  );
+  const [mode, setMode] = useState<Mode>(() => {
+    const stored = saved("clear-mode", "standard") as Mode;
+    return MODES.includes(stored) ? stored : "standard";
+  });
   const [theme, setTheme] = useState<Theme>(() =>
     saved("clear-theme", "light") === "dark" ? "dark" : "light",
   );
@@ -370,15 +382,21 @@ export default function App() {
     () =>
       interpret(
         hand.filter((c) => selected.includes(c.id)),
-        game?.wildRank ?? null,
+        game ? gameWildRanks(game) : null,
       ).filter((p) => beats(p, game?.trick?.play ?? null)),
-    [selected, hand, game?.wildRank, game?.trick],
+    [selected, hand, game?.wildRank, game?.heavenRank, game?.trick],
   );
   const submitPlay = (p: Play) => {
     setChoices(null);
     void command({
       type: "game",
-      action: { type: "play", cardIds: p.cards.map((c) => c.id), as: p.as },
+      action: {
+        type: "play",
+        cardIds: p.cards.map((c) => c.id),
+        as: p.as,
+        kind: p.kind,
+        main: p.main,
+      },
     });
   };
   const playSelected = () => {
@@ -472,7 +490,14 @@ export default function App() {
                   card={card}
                   as={last.play!.as[i]}
                   small
-                  wild={card.rank === game?.wildRank}
+                  wild={!!game && isWildRank(card.rank, gameWildRanks(game))}
+                  wildLabel={
+                    !game?.heavenRank
+                      ? "癞"
+                      : card.rank === game.heavenRank
+                        ? "天"
+                        : "地"
+                  }
                 />
               ))}
             </div>
@@ -584,38 +609,48 @@ export default function App() {
               <div className="lobby-profile">{nicknameButton()}</div>
             </div>
             <div className="mode-selector" role="group" aria-label="玩法模式">
-              <button
-                className={mode === "standard" ? "selected-mode" : ""}
-                aria-pressed={mode === "standard"}
-                onClick={() => changeMode("standard")}
-              >
-                标准玩法
-              </button>
-              <button
-                className={mode === "wild" ? "selected-mode" : ""}
-                aria-pressed={mode === "wild"}
-                onClick={() => changeMode("wild")}
-              >
-                <Sparkles size={14} />
-                癞子玩法
-              </button>
+              {MODES.map((value) => (
+                <button
+                  key={value}
+                  className={mode === value ? "selected-mode" : ""}
+                  aria-pressed={mode === value}
+                  onClick={() => changeMode(value)}
+                >
+                  {MODE_NAMES[value]}
+                </button>
+              ))}
             </div>
           </div>
           <div className="lobby-grid">
             <section className="table-hero" aria-label="现代纸牌和液态玻璃牌桌">
               <span className="hero-tag">
                 <span className="status-dot" />
-                {mode === "standard" ? "经典三人斗地主" : "四癞子 · 更多可能"}
+                {mode === "standard"
+                  ? "经典三人斗地主"
+                  : mode === "wild"
+                    ? "四癞子 · 更多可能"
+                    : "天地八癞 · 长炸争锋"}
               </span>
               <div className="hero-orbit orbit-one" />
               <div className="hero-orbit orbit-two" />
               <div className="hero-glass">
                 <span className="table-engraving">DARWIN</span>
               </div>
-              <div className={`hero-fan ${mode === "wild" ? "wild-fan" : ""}`}>
+              <div
+                className={`hero-fan ${mode !== "standard" ? "wild-fan" : ""}`}
+              >
                 {heroCards.map((card, i) => (
                   <div className={`hero-card hero-card-${i}`} key={card.id}>
-                    <CardFace card={card} wild={mode === "wild" && i === 2} />
+                    <CardFace
+                      card={card}
+                      wild={
+                        (mode === "wild" && i === 2) ||
+                        (mode === "heaven-earth" && i !== 1)
+                      }
+                      wildLabel={
+                        mode === "heaven-earth" ? (i === 0 ? "天" : "地") : "癞"
+                      }
+                    />
                   </div>
                 ))}
               </div>
@@ -757,7 +792,7 @@ export default function App() {
             <div className="room-title">
               <span>{room.kind === "pve" ? "人机练习" : "好友对局"}</span>
               <span className="mode-pill">
-                {room.mode === "wild" ? "癞子" : "标准"}
+                {MODE_NAMES[room.mode].replace("玩法", "")}
               </span>
               {room.kind === "pvp" && (
                 <button
@@ -830,7 +865,19 @@ export default function App() {
                 <div className="bottom-cards">
                   {game!.bottom.length
                     ? game!.bottom.map((c) => (
-                        <CardFace key={c.id} card={c} small />
+                        <CardFace
+                          key={c.id}
+                          card={c}
+                          small
+                          wild={isWildRank(c.rank, gameWildRanks(game!))}
+                          wildLabel={
+                            !game!.heavenRank
+                              ? "癞"
+                              : c.rank === game!.heavenRank
+                                ? "天"
+                                : "地"
+                          }
+                        />
                       ))
                     : [0, 1, 2].map((i) => (
                         <span key={i} className="bottom-back">
@@ -849,10 +896,27 @@ export default function App() {
                     底注 {game!.baseStake} Tokens
                   </span>
                 </button>
-                {game!.wildRank && (
-                  <span className="wild-indicator">
-                    本局癞子 <b>{rankText(game!.wildRank)}</b>
+                {game!.heavenRank ? (
+                  <span
+                    className="wild-indicator heaven-earth-indicator"
+                    aria-label="天地癞子点数"
+                  >
+                    <span>
+                      天癞子 <b>{rankText(game!.heavenRank)}</b>
+                    </span>
+                    <span>
+                      地癞子{" "}
+                      <b>
+                        {game!.wildRank ? rankText(game!.wildRank) : "待定"}
+                      </b>
+                    </span>
                   </span>
+                ) : (
+                  game!.wildRank && (
+                    <span className="wild-indicator">
+                      本局癞子 <b>{rankText(game!.wildRank)}</b>
+                    </span>
+                  )
                 )}
               </div>
             )}
@@ -1099,7 +1163,8 @@ export default function App() {
                   cards={hand}
                   selected={selected}
                   setSelected={setSelected}
-                  wild={game!.wildRank}
+                  wild={gameWildRanks(game!)}
+                  heavenRank={game!.heavenRank}
                   bottomIds={
                     game!.landlord === mySeat
                       ? game!.bottom.map((c) => c.id)
@@ -1455,7 +1520,7 @@ export default function App() {
                     {h.won ? "胜" : "负"}
                   </span>
                   <span>
-                    {h.mode === "wild" ? "癞子" : "标准"} ·{" "}
+                    {MODE_NAMES[h.mode].replace("玩法", "")} ·{" "}
                     {h.kind === "pve" ? "练习" : "好友"}
                     <small>
                       {new Date(h.at).toLocaleString("zh-CN", {
@@ -1669,6 +1734,9 @@ function Rules() {
               ["标准：炸弹、王炸", "×2"],
               ["癞子：软炸弹", "×2"],
               ["癞子：硬炸、纯癞子炸、王炸", "×4"],
+              ["天地：四软炸", "×2"],
+              ["天地：四硬炸、四混合癞子炸、四纯癞子炸", "×4"],
+              ["天地：五张及以上长炸、王炸", "×6"],
               ["春天 / 反春天", "×2"],
             ].map(([label, value]) => (
               <div key={label}>
@@ -1686,6 +1754,13 @@ function Rules() {
             定地主后随机选择一个非王点数为癞子，可替代 3 至
             2。全由癞子组成的一至三张按原点数，四张为纯癞子炸。王炸 ＞ 纯癞子炸
             ＞ 硬炸 ＞ 软炸；不设长炸弹。
+          </p>
+          <h3>天地癞子</h3>
+          <p>
+            开局公开天癞子，定地主后公开另一点数的地癞子，共八张。两者都可替代非王牌；单独组成普通牌型时按原点数。
+            支持五至十二张软炸、四至八张混合癞子炸。王炸最大，其次先比炸弹张数；同张数时纯癞子炸
+            ＞ 混合癞子炸 ＞ 硬炸 ＞ 软炸。
+            四张同点数癞子为纯癞子炸；两种癞子合用为混合癞子炸，同张数混合癞子炸不可互压。
           </p>
         </section>
       </div>
@@ -1759,6 +1834,8 @@ function ReplayView({
         <small>
           {step < 0 ? "发牌完成" : `第 ${step + 1} 步 / ${game.events.length}`}{" "}
           · 底注 {game.baseStake ?? 10} Tokens
+          {game.heavenRank &&
+            ` · 天癞子 ${rankText(game.heavenRank)} / 地癞子 ${rankText(game.wildRank!)}`}
         </small>
         <h3>
           {last
@@ -1813,7 +1890,14 @@ function ReplayView({
                   key={c.id}
                   card={c}
                   small
-                  wild={c.rank === game.wildRank}
+                  wild={isWildRank(c.rank, gameWildRanks(game))}
+                  wildLabel={
+                    !game.heavenRank
+                      ? "癞"
+                      : c.rank === game.heavenRank
+                        ? "天"
+                        : "地"
+                  }
                 />
               ))}
             </div>

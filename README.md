@@ -1,6 +1,6 @@
 # Darwin斗地主
 
-可部署的三人斗地主：标准 / 四癞子、PVE / 房间码 PVP、独立浅色 / 深色主题。规则参考传统欢乐斗地主，并采用本项目明确约定的底牌倍率与带牌规则。
+可部署的三人斗地主：标准 / 四癞子 / 天地癞子、PVE / 房间码 PVP、独立浅色 / 深色主题。规则参考欢乐斗地主公开资料，并采用本项目明确约定的底牌倍率与带牌规则。
 
 ## 本地运行
 
@@ -30,8 +30,9 @@ ORIGIN=http://127.0.0.1:3001 COOKIE_SECURE=false npm start
 ## 已实现
 
 - 现代纸牌、液态玻璃牌桌、浅深主题；手机竖屏双排、横屏单排手牌，点击 / 拖动选牌、取消、键盘操作及减少动态效果。
-- 主题仅手动切换并记住选择；首次默认浅色，切换标准 / 癞子玩法或加入房间均保留当前主题。
-- 标准与四癞子共用规则引擎。服务器校验牌权、物理手牌、牌型、癞子解释和倍率，客户端不能指定胜负或余额。
+- 主题仅手动切换并记住选择；首次默认浅色，切换任意玩法或加入房间均保留当前主题。
+- 标准、四癞子与天地癞子共用规则引擎。服务器校验牌权、物理手牌、牌型、癞子解释和倍率，客户端不能指定胜负或余额。
+- 天地癞子：叫地主前公开天癞子，定地主后公开地癞子；支持八张癞子和最多十二张长炸，四张纯癞子炸与混合癞子炸分别分级。手牌、底牌、出牌、倍率账目和复盘均显示相应标记。
 - 两名 AI 可分别选谨慎、平衡、激进；使用相同计算预算，只改变策略权重。决策基于自己的手牌、公开出牌、底牌和剩余张数，结合未知牌采样与有限搜索。
 - 六位房间码、三人全部准备自动开局；满座加入为观众，非游戏期间可站起 / 坐下，房主离开自动移交。首版不做大厅匹配、账户注册或跨设备找回。
 - 主界面与房间底部均可直接编辑昵称，支持对局中修改；新昵称实时同步给同房玩家、观众及同账户的其他窗口。改名保留账户、余额和座位，已结束对局的回放保留结算时的名字。
@@ -50,7 +51,7 @@ ORIGIN=http://127.0.0.1:3001 COOKIE_SECURE=false npm start
 - [验收记录与限制](docs/ACCEPTANCE.md)
 - [接口与代码结构](docs/ARCHITECTURE.md)
 
-每个 PR 和 `main` 的推送都会触发 GitHub Actions：Node.js 24 / 26 测试及构建，然后构建 Docker 生产镜像，在容器服务上验证昵称同步、完整 PVE、四会话 PVP 和 Chromium / WebKit / Firefox 交互。浏览器截图及容器日志随运行记录保存 7 天。
+每个 PR 和 `main` 的推送都会触发 GitHub Actions：Node.js 24 / 26 测试及构建，然后构建 Docker 生产镜像，在容器服务上验证昵称同步、完整四癞子与天地癞子 PVE、标准与天地癞子四会话 PVP、十二张长炸以及 Chromium / WebKit / Firefox 交互。浏览器截图及容器日志随运行记录保存 7 天。
 
 Python Playwright 浏览器脚本为可选验收工具，不是生产依赖：
 
@@ -60,6 +61,8 @@ python3 -m playwright install chromium firefox webkit
 GAME_URL=http://127.0.0.1:5173 python3 tests/browser_nickname.py
 GAME_URL=http://127.0.0.1:5173 python3 tests/browser_smoke.py
 GAME_URL=http://127.0.0.1:5173 python3 tests/browser_pvp.py
+GAME_URL=http://127.0.0.1:5173 GAME_MODE_LABEL=天地癞子 python3 tests/browser_smoke.py
+GAME_URL=http://127.0.0.1:5173 GAME_MODE_LABEL=天地癞子 python3 tests/browser_pvp.py
 GAME_URL=http://127.0.0.1:5173 python3 tests/browser_engines.py
 ```
 

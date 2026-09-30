@@ -73,6 +73,32 @@ jobs:
         run: python tests/browser_smoke.py
       - name: Complete PVP with three players and a spectator
         run: python tests/browser_pvp.py
+      - name: Complete heaven-earth PVE and PVP
+        env:
+          GAME_MODE_LABEL: 天地癞子
+          SCREENSHOT_DIR: /tmp/landlord-screenshots/heaven-earth
+        run: |
+          python tests/browser_smoke.py
+          python tests/browser_pvp.py
+      - name: Twelve-card bomb across three player perspectives
+        env:
+          GAME_URL: http://127.0.0.1:3002
+          HEAVEN_FIXTURE: /tmp/darwin-heaven-fixture.json
+          SCREENSHOT_DIR: /tmp/landlord-screenshots/heaven-earth
+        run: |
+          docker run --detach --name darwin-heaven-fixture \
+            --publish 127.0.0.1:3002:3002 \
+            --env HOST=0.0.0.0 --env PORT=3002 \
+            --env ORIGIN="$GAME_URL" --env COOKIE_SECURE=false \
+            --mount type=volume,source=darwin-heaven-fixture-data,target=/app/data \
+            darwin-landlord:ci node --import tsx tests/serve_heaven_fixture.ts
+          for attempt in {1..30}; do
+            if curl --fail --silent "$GAME_URL/api/health"; then break; fi
+            sleep 1
+          done
+          curl --fail --silent "$GAME_URL/api/health"
+          docker cp darwin-heaven-fixture:/app/data/heaven-fixture.json "$HEAVEN_FIXTURE"
+          python tests/browser_heaven_bomb.py
       - name: Relief wrong-answer rotation and payment
         run: |
           docker exec darwin-ci node --import tsx tests/seed_relief.ts /app/data/game.sqlite > /tmp/darwin-relief.json
@@ -84,6 +110,7 @@ jobs:
         run: |
           mkdir -p test-results
           docker logs darwin-ci > test-results/container.log 2>&1 || true
+          docker logs darwin-heaven-fixture > test-results/heaven-fixture.log 2>&1 || true
       - name: Upload browser screenshots and container log
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -92,7 +119,8 @@ jobs:
           path: |
             /tmp/landlord-screenshots
             test-results/container.log
+            test-results/heaven-fixture.log
           retention-days: 7
       - name: Stop test container
         if: always()
-        run: docker rm --force darwin-ci || true
+        run: docker rm --force darwin-ci darwin-heaven-fixture || true
