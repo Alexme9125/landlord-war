@@ -32,7 +32,7 @@ with sync_playwright() as p:
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.goto(BASE)
     expect(page.get_by_role('button', name='开始练习', exact=True)).to_be_enabled(timeout=15000)
-    expect(page.get_by_label('底注', exact=True)).to_have_value('10')
+    expect(page.get_by_role('group', name='底注', exact=True).get_by_role('button', name='10', exact=True)).to_have_attribute('aria-pressed','true')
     screenshot(page, 'home-light-desktop')
     page.get_by_role('button', name='切换深色主题').click()
     expect(page.locator('html')).to_have_attribute('data-theme', 'dark')
@@ -52,7 +52,7 @@ with sync_playwright() as p:
     page.set_viewport_size({'width':390,'height':844})
     screenshot(page, 'home-dark-390')
     page.get_by_role('button', name='切换浅色主题').click()
-    page.get_by_label('底注', exact=True).select_option('20')
+    page.get_by_role('group', name='底注', exact=True).get_by_role('button', name='20', exact=True).click()
     page.get_by_role('button', name='开始练习',exact=True).click()
     expect(page.locator('.hand')).to_be_visible()
     if MODE_LABEL == '天地癞子':

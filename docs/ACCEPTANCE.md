@@ -36,6 +36,7 @@ Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产�
 | PVP：确定地主后主动离开 | 其他端立即收到判负结果 |
 | PVP：观众赛后全牌回放 | 通过 |
 | 底注：20 Tokens PVE、50 Tokens PVP，赛后修改为 10 | HUD、结算、回放一致；四端同步，开局无编辑入口；旧结算保留 50，下一局使用 10 |
+| 底注分段按钮：主界面与房主设置，深浅主题，320 / 390 / 640 / 768 / 1440px | 触摸与键盘切换通过，选中项高亮，无重叠或横向溢出；房间同步并清空准备，重复点击当前值不影响准备状态 |
 | 救济：连续两次答错 → 自动换题 → 答对 | 指定文案、不同新题、输入清空并聚焦；答对到账 10K，多窗口与刷新一致 |
 | Chromium / WebKit：390px、320px 竖屏 | 无横向溢出，双排手牌 |
 | Chromium / WebKit：844 × 390 横屏 | 单排手牌完整落在可视高度内 |
@@ -61,6 +62,7 @@ Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产�
 - [320px 重置首次确认](screenshots/token-reset-first.png)
 - [320px 重置最终确认](screenshots/token-reset-second.png)
 - [320px 房主选择底注](screenshots/room-stake.png)
+- [320px 主界面底注按钮](screenshots/stake-home.png)
 - [320px 救济答错与新题](screenshots/relief-retry.png)
 - [天地癞子移动主界面](screenshots/heaven-earth-home.png)
 - [天癞子公开、地癞子待定](screenshots/heaven-earth-bidding.png)

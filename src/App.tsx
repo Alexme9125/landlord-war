@@ -659,7 +659,7 @@ export default function App() {
                 <span>每一手，都有新可能。</span>
               </div>
               <div className="table-spec">
-                <StakeSelect
+                <StakeSelector
                   value={baseStake}
                   onChange={setBaseStake}
                   disabled={busy}
@@ -924,7 +924,7 @@ export default function App() {
               <div className="table-top-info waiting-stake">
                 {room.host === account?.id ? (
                   <>
-                    <StakeSelect
+                    <StakeSelector
                       value={room.baseStake}
                       disabled={busy || !connected}
                       onChange={(baseStake) =>
@@ -1780,7 +1780,7 @@ function Rules() {
   );
 }
 
-function StakeSelect({
+function StakeSelector({
   value,
   onChange,
   disabled,
@@ -1790,21 +1790,24 @@ function StakeSelect({
   disabled?: boolean;
 }) {
   return (
-    <label className="stake-control">
+    <div className="stake-control" role="group" aria-label="底注">
       <span>底注</span>
-      <select
-        aria-label="底注"
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(Number(e.target.value) as BaseStake)}
-      >
+      <div className="stake-options">
         {BASE_STAKES.map((stake) => (
-          <option key={stake} value={stake}>
-            {stake} Tokens
-          </option>
+          <button
+            key={stake}
+            type="button"
+            aria-pressed={value === stake}
+            disabled={disabled}
+            onClick={() => {
+              if (stake !== value) onChange(stake);
+            }}
+          >
+            {stake}
+          </button>
         ))}
-      </select>
-    </label>
+      </div>
+    </div>
   );
 }
 

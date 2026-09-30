@@ -50,7 +50,7 @@ with sync_playwright() as p:
     watcher=pages[1]
     players[1].get_by_role('button',name='准备好了',exact=True).click()
     expect(players[1].get_by_role('button',name='取消准备',exact=True)).to_be_visible()
-    pages[0].get_by_label('底注',exact=True).select_option('50')
+    pages[0].get_by_role('group',name='底注',exact=True).get_by_role('button',name='50',exact=True).click()
     expect(players[1].get_by_role('button',name='准备好了',exact=True)).to_be_visible()
     for page in pages[1:]:
         expect(page.locator('.waiting-stake')).to_have_text('底注 50 Tokens · 房主设定')
@@ -114,7 +114,7 @@ with sync_playwright() as p:
             page.get_by_label('算术题答案').fill(str(sum(map(int, re.findall(r'\d+', question)))))
             page.get_by_role('button',name='领取 10 KTokens',exact=True).click()
             expect(page.get_by_role('dialog')).to_have_count(0)
-    pages[0].get_by_label('底注',exact=True).select_option('10')
+    pages[0].get_by_role('group',name='底注',exact=True).get_by_role('button',name='10',exact=True).click()
     expect(pages[1].locator('.waiting-stake')).to_have_text('底注 10 Tokens · 房主设定')
     pages[0].get_by_role('button',name='查看上局结果',exact=True).click()
     expect(pages[0].locator('.result-head')).to_contain_text('底注 50 Tokens')
