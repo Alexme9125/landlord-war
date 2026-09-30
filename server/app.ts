@@ -138,6 +138,21 @@ export function createApplication(
       io.to(socket).emit("account", account);
     res.json(account);
   });
+  app.post("/api/me/reset-tokens", (req, res) => {
+    const id: string = res.locals.account.id;
+    if (rooms.current(id)) {
+      res.status(409).json({ error: "请先离开房间，回到主界面后重置 Tokens" });
+      return;
+    }
+    if (req.body?.confirmed !== true) {
+      res.status(400).json({ error: "请完成确认后重置 Tokens" });
+      return;
+    }
+    const account = store.resetTokens(id);
+    for (const socket of rooms.connections.get(id) ?? [])
+      io.to(socket).emit("account", account);
+    res.json(account);
+  });
   app.get("/api/history", (_req, res) =>
     res.json(store.getHistory(res.locals.account.id)),
   );

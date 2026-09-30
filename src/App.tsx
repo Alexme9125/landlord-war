@@ -23,6 +23,7 @@ import {
   Moon,
   Pencil,
   Plus,
+  RefreshCw,
   Settings2,
   ShieldCheck,
   Sparkles,
@@ -102,8 +103,8 @@ export default function App() {
   const [mode, setMode] = useState<Mode>(
     () => saved("clear-mode", "standard") as Mode,
   );
-  const [theme, setTheme] = useState<Theme>(
-    () => saved("clear-theme", "light") === "dark" ? "dark" : "light",
+  const [theme, setTheme] = useState<Theme>(() =>
+    saved("clear-theme", "light") === "dark" ? "dark" : "light",
   );
   const [account, setAccount] = useState<Account | null>(null),
     [room, setRoom] = useState<RoomView | null>(null);
@@ -123,6 +124,8 @@ export default function App() {
     | "leave"
     | "result"
     | "relief"
+    | "reset-tokens"
+    | "confirm-reset-tokens"
     | "replay"
     | null
   >(null);
@@ -159,6 +162,10 @@ export default function App() {
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", theme === "light" ? "#eaf0f4" : "#101f2c");
   }, [theme]);
+  useEffect(() => {
+    if (room && (modal === "reset-tokens" || modal === "confirm-reset-tokens"))
+      closeModal();
+  }, [room, modal, closeModal]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(timer);
@@ -496,22 +503,39 @@ export default function App() {
           >
             玩法说明 <ArrowRight size={14} />
           </button>
-          <button
-            className="wallet"
-            title={account ? `${account.balance} Tokens` : ""}
-            onClick={() =>
-              account?.balance === "0"
-                ? void openRelief()
-                : setNotice(`当前余额 ${account?.balance ?? "…"} Tokens`)
-            }
-          >
-            <span className="token-symbol">T</span>
-            <span>
-              {formatTokens(account?.balance ?? "0")}
-              <small>Tokens</small>
-            </span>
-            {account?.balance === "0" && <Plus size={15} />}
-          </button>
+          <div className="wallet-controls">
+            <button
+              className="wallet"
+              title={account ? `${account.balance} Tokens` : ""}
+              onClick={() =>
+                account?.balance === "0"
+                  ? void openRelief()
+                  : setNotice(`当前余额 ${account?.balance ?? "…"} Tokens`)
+              }
+            >
+              <span className="token-symbol">T</span>
+              <span>
+                {formatTokens(account?.balance ?? "0")}
+                <small>Tokens</small>
+              </span>
+              {account?.balance === "0" && <Plus size={15} />}
+            </button>
+            {!room && (
+              <button
+                className="icon-button token-reset-button"
+                aria-label="重置 Tokens"
+                title="重置 Tokens"
+                disabled={busy || !account || !connected}
+                onClick={() => {
+                  setNotice("");
+                  setError("");
+                  setModal("reset-tokens");
+                }}
+              >
+                <RefreshCw size={17} aria-hidden="true" />
+              </button>
+            )}
+          </div>
           <span className="header-divider" />
           <button
             className="icon-button"
@@ -1164,6 +1188,65 @@ export default function App() {
           网络中断，正在重连。60 秒内返回可继续。
         </div>
       )}
+
+      {!room &&
+        (modal === "reset-tokens" || modal === "confirm-reset-tokens") && (
+          <Modal
+            key={modal}
+            title={
+              modal === "reset-tokens"
+                ? "臭牌篓子来重置Token啦？"
+                : "这么说你承认你是臭牌篓子喽？"
+            }
+            onClose={closeModal}
+          >
+            <p className="muted">余额将重置为 100 KTokens。</p>
+            <div
+              className={`modal-actions ${modal === "confirm-reset-tokens" ? "token-reset-actions" : ""}`}
+            >
+              {modal === "reset-tokens" ? (
+                <>
+                  <button
+                    className="primary-button"
+                    onClick={() => setModal("confirm-reset-tokens")}
+                  >
+                    确认
+                  </button>
+                  <button className="secondary-button" onClick={closeModal}>
+                    取消
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="primary-button"
+                    disabled={busy || !connected}
+                    onClick={() =>
+                      void perform(async () => {
+                        setAccount(
+                          await api<Account>("/me/reset-tokens", "POST", {
+                            confirmed: true,
+                          }),
+                        );
+                        closeModal();
+                        setNotice("Tokens 已重置为 100 KTokens");
+                      })
+                    }
+                  >
+                    我就是臭牌篓子，给我重置吧
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={busy}
+                    onClick={closeModal}
+                  >
+                    我不是臭牌篓子！
+                  </button>
+                </>
+              )}
+            </div>
+          </Modal>
+        )}
 
       {modal === "nickname" && (
         <Modal title="修改昵称" onClose={closeModal}>

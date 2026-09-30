@@ -173,9 +173,37 @@ export class Store {
     });
   }
 
-  getHistory(
-    id: string,
-  ): {
+  resetTokens(id: string): Account {
+    return this.transaction(() => {
+      const account = this.account(id);
+      if (!account) throw new Error("账户不存在");
+      const delta = STARTING_BALANCE - amount(account.balance, "余额");
+      const now = Date.now();
+      this.db
+        .prepare("UPDATE accounts SET balance = ? WHERE id = ?")
+        .run(STARTING_BALANCE.toString(), id);
+      this.db
+        .prepare(
+          "INSERT INTO ledger (id, account_id, kind, at, delta, balance) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          randomUUID(),
+          id,
+          "reset",
+          now,
+          delta.toString(),
+          STARTING_BALANCE.toString(),
+        );
+      this.db
+        .prepare(
+          "UPDATE relief_challenges SET used_at = ? WHERE account_id = ? AND used_at IS NULL",
+        )
+        .run(now, id);
+      return this.account(id)!;
+    });
+  }
+
+  getHistory(id: string): {
     id: string;
     mode: string;
     kind: string;

@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Store } from "../server/store.js";
 
@@ -54,6 +55,71 @@ function input(
 }
 
 describe("Store", () => {
+  it("resets balances up or down to 100K atomically while preserving account history", () => {
+    const dir = mkdtempSync(join(tmpdir(), "landlord-reset-"));
+    dirs.push(dir);
+    const path = join(dir, "game.sqlite");
+    const s = store(path);
+    const { accounts, players } = setup(s);
+    s.settle(input(players));
+    const loser = s.getAccount(accounts[0].account.id)!;
+    const winner = s.getAccount(accounts[1].account.id)!;
+    const history = s.getHistory(loser.id);
+    const replay = s.getReplay("game-1", loser.id);
+    expect(loser.balance).toBe("0");
+    expect(winner.balance).toBe("133333");
+    expect(s.resetTokens(loser.id)).toEqual({ ...loser, balance: "100000" });
+    expect(s.resetTokens(winner.id)).toEqual({ ...winner, balance: "100000" });
+    expect(s.resetTokens(loser.id)).toEqual({ ...loser, balance: "100000" });
+    expect(s.getHistory(loser.id)).toEqual(history);
+    expect(s.getReplay("game-1", loser.id)).toEqual(replay);
+    expect(s.authenticate(accounts[0].token)).toEqual({
+      ...loser,
+      balance: "100000",
+    });
+    expect(() => s.resetTokens("missing-account")).toThrow("账户不存在");
+    s.close();
+    opened.pop();
+    const reopened = store(path);
+    expect(reopened.authenticate(accounts[0].token)).toEqual({
+      ...loser,
+      balance: "100000",
+    });
+    const audit = new DatabaseSync(path, { readOnly: true });
+    try {
+      expect(
+        audit
+          .prepare(
+            "SELECT delta, balance FROM ledger WHERE kind = 'reset' ORDER BY rowid",
+          )
+          .all(),
+      ).toEqual([
+        { delta: "100000", balance: "100000" },
+        { delta: "-33333", balance: "100000" },
+        { delta: "0", balance: "100000" },
+      ]);
+    } finally {
+      audit.close();
+    }
+  });
+
+  it("invalidates old relief challenges when resetting Tokens", () => {
+    const s = store();
+    const { accounts, players } = setup(s);
+    const id = accounts[0].account.id;
+    s.settle(input(players));
+    const challenge = s.createRelief(id);
+    const numbers = challenge.question.match(/^(\d+) \+ (\d+)/)!;
+    const answer = String(Number(numbers[1]) + Number(numbers[2]));
+    s.resetTokens(id);
+    s.settle(input(players, { id: "game-after-reset" }));
+    expect(s.getAccount(id)?.balance).toBe("0");
+    expect(() => s.claimRelief(id, challenge.id, answer)).toThrow(
+      "无效或已过期",
+    );
+    expect(s.getAccount(id)?.balance).toBe("0");
+  });
+
   it("persists accounts and authenticates only the bearer token", () => {
     const dir = mkdtempSync(join(tmpdir(), "landlord-store-"));
     dirs.push(dir);
