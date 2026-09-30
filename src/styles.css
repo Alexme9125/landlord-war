@@ -2259,7 +2259,7 @@ svg {
   .table-spec {
     left: 19px;
     right: 19px;
-    gap: 13px;
+    gap: 10px;
   }
   .table-spec b {
     font-size: 10px;
