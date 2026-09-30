@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import type {
   Account,
+  BaseStake,
   Card,
   GameState,
   Mode,
@@ -43,8 +44,9 @@ import type {
   Play,
   RoomCommand,
   RoomView,
+  ReliefChallenge,
 } from "../shared/types.ts";
-import { PERSONALITIES } from "../shared/types.ts";
+import { BASE_STAKES, PERSONALITIES } from "../shared/types.ts";
 import { formatTokens, rankText, sortCards } from "../shared/cards.ts";
 import { beats, bombLevel, interpret, playName } from "../shared/rules.ts";
 import { CardFace, Hand, Modal } from "./components.tsx";
@@ -79,6 +81,14 @@ const save = (key: string, value: string) => {
     /* Storage may be unavailable. */
   }
 };
+class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly challenge?: ReliefChallenge,
+  ) {
+    super(message);
+  }
+}
 async function api<T>(
   path: string,
   method = "GET",
@@ -90,7 +100,8 @@ async function api<T>(
     body: body ? JSON.stringify(body) : undefined,
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? "请求失败");
+  if (!response.ok)
+    throw new ApiError(result.error ?? "请求失败", result.challenge);
   return result;
 }
 const heroCards: Card[] = [
@@ -100,6 +111,7 @@ const heroCards: Card[] = [
 ];
 
 export default function App() {
+  const [baseStake, setBaseStake] = useState<BaseStake>(10);
   const [mode, setMode] = useState<Mode>(
     () => saved("clear-mode", "standard") as Mode,
   );
@@ -138,10 +150,9 @@ export default function App() {
   const [sound, setSound] = useState(
       () => saved("clear-sound", "off") === "on",
     ),
-    [relief, setRelief] = useState<{ id: string; question: string } | null>(
-      null,
-    ),
-    [answer, setAnswer] = useState("");
+    [relief, setRelief] = useState<ReliefChallenge | null>(null),
+    [answer, setAnswer] = useState(""),
+    [reliefError, setReliefError] = useState("");
   const [nickname, setNickname] = useState("");
   const socket = useRef<Socket | null>(null),
     roomRef = useRef<RoomView | null>(null),
@@ -323,6 +334,7 @@ export default function App() {
         mode,
         kind,
         personalities: personas,
+        baseStake,
       });
       acceptRoom(result.room);
     });
@@ -346,6 +358,7 @@ export default function App() {
     perform(async () => {
       setRelief(await api("/relief", "POST"));
       setAnswer("");
+      setReliefError("");
       setModal("relief");
     });
   const game = room?.game,
@@ -611,9 +624,11 @@ export default function App() {
                 <span>每一手，都有新可能。</span>
               </div>
               <div className="table-spec">
-                <span>
-                  底注 <b>10 Tokens</b>
-                </span>
+                <StakeSelect
+                  value={baseStake}
+                  onChange={setBaseStake}
+                  disabled={busy}
+                />
                 <span>
                   起始 <b>×15</b>
                 </span>
@@ -830,11 +845,32 @@ export default function App() {
                   <small>公共倍数</small>
                   <strong key={game!.multiplier}>×{game!.multiplier}</strong>
                   <Info size={13} />
+                  <span className="stake-value">
+                    底注 {game!.baseStake} Tokens
+                  </span>
                 </button>
                 {game!.wildRank && (
                   <span className="wild-indicator">
                     本局癞子 <b>{rankText(game!.wildRank)}</b>
                   </span>
+                )}
+              </div>
+            )}
+            {!live && (
+              <div className="table-top-info waiting-stake">
+                {room.host === account?.id ? (
+                  <>
+                    <StakeSelect
+                      value={room.baseStake}
+                      disabled={busy || !connected}
+                      onChange={(baseStake) =>
+                        void command({ type: "stake", baseStake })
+                      }
+                    />
+                    <small>修改后需重新准备</small>
+                  </>
+                ) : (
+                  <span>底注 {room.baseStake} Tokens · 房主设定</span>
                 )}
               </div>
             )}
@@ -1110,7 +1146,7 @@ export default function App() {
                         </span>
                       )
                     ) : (
-                      <span>底注 10 Tokens · 起始 ×15</span>
+                      <span>底注 {game!.baseStake} Tokens · 起始 ×15</span>
                     )}
                   </div>
                 </div>
@@ -1400,7 +1436,7 @@ export default function App() {
             ))}
           </div>
           <p className="muted">
-            个人加倍独立计算：底注 10 × 公共倍数 × 地主加倍 ×
+            个人加倍独立计算：底注 {game.baseStake} × 公共倍数 × 地主加倍 ×
             对应农民加倍。倍率不封顶，输家最多支付现有余额。
           </p>
         </Modal>
@@ -1455,7 +1491,8 @@ export default function App() {
               {room.result.winner === "landlord" ? "地主获胜" : "农民获胜"}
             </h3>
             <p>
-              {room.result.reason} · 公共倍数 ×{room.result.multiplier}
+              {room.result.reason} · 底注 {room.result.baseStake} Tokens ·
+              公共倍数 ×{room.result.multiplier}
             </p>
           </div>
           <div className="result-lines">
@@ -1508,19 +1545,37 @@ export default function App() {
             答对一道算术题，领取 10 KTokens。每次输光后都可以再来。
           </p>
           <div className="arithmetic">{relief.question}</div>
+          {reliefError && (
+            <p className="relief-feedback" role="alert">
+              {reliefError}
+            </p>
+          )}
           <form
             onSubmit={(e) => {
               e.preventDefault();
               void perform(async () => {
-                setAccount(
-                  await api("/relief/claim", "POST", { id: relief.id, answer }),
-                );
-                closeModal();
-                setNotice("已领取 10 KTokens，继续练习吧");
+                try {
+                  setAccount(
+                    await api("/relief/claim", "POST", {
+                      id: relief.id,
+                      answer,
+                    }),
+                  );
+                  closeModal();
+                  setNotice("已领取 10 KTokens，继续练习吧");
+                } catch (error) {
+                  if (!(error instanceof ApiError) || !error.challenge)
+                    throw error;
+                  setRelief(error.challenge);
+                  setAnswer("");
+                  setReliefError(error.message);
+                }
               });
             }}
           >
             <input
+              key={relief.id}
+              autoFocus
               className="answer-input"
               aria-label="算术题答案"
               inputMode="numeric"
@@ -1637,7 +1692,7 @@ function Rules() {
       <div className="rule-footnote">
         <b>Tokens 与离开</b>
         <p>
-          底注 10 Tokens，初始 100
+          房主可在开局前选择底注 10 / 20 / 50 Tokens，默认 10。初始 100
           KTokens。倍率无上限、余额不透支，实际扣款等于实际奖励；地主余额不足按理论应得比例分账。输光后答题领取
           10 KTokens，次数不限。主动离开判阵营负，断线保留 60
           秒；确定地主前退出作废，退出不触发春天。
@@ -1647,6 +1702,34 @@ function Rules() {
         </p>
       </div>
     </div>
+  );
+}
+
+function StakeSelect({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: BaseStake;
+  onChange: (value: BaseStake) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="stake-control">
+      <span>底注</span>
+      <select
+        aria-label="底注"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value) as BaseStake)}
+      >
+        {BASE_STAKES.map((stake) => (
+          <option key={stake} value={stake}>
+            {stake} Tokens
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -1674,7 +1757,8 @@ function ReplayView({
     <div className="replay-content">
       <div className="replay-explanation">
         <small>
-          {step < 0 ? "发牌完成" : `第 ${step + 1} 步 / ${game.events.length}`}
+          {step < 0 ? "发牌完成" : `第 ${step + 1} 步 / ${game.events.length}`}{" "}
+          · 底注 {game.baseStake ?? 10} Tokens
         </small>
         <h3>
           {last

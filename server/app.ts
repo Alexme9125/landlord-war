@@ -2,7 +2,7 @@ import express from "express";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { Server } from "socket.io";
-import { Store } from "./store.ts";
+import { Store, ReliefAnswerError } from "./store.ts";
 import { Rooms } from "./rooms.ts";
 import type { Mode, Personality, RoomCommand } from "../shared/types.ts";
 
@@ -169,15 +169,16 @@ export function createApplication(
   app.post("/api/relief", (_req, res) =>
     res.json(store.createRelief(res.locals.account.id)),
   );
-  app.post("/api/relief/claim", (req, res) =>
-    res.json(
-      store.claimRelief(
-        res.locals.account.id,
-        String(req.body?.id ?? ""),
-        String(req.body?.answer ?? ""),
-      ),
-    ),
-  );
+  app.post("/api/relief/claim", (req, res) => {
+    const account = store.claimRelief(
+      res.locals.account.id,
+      String(req.body?.id ?? ""),
+      String(req.body?.answer ?? ""),
+    );
+    for (const socket of rooms.connections.get(account.id) ?? [])
+      io.to(socket).emit("account", account);
+    res.json(account);
+  });
   app.use("/api", (_req, res) => res.status(404).json({ error: "接口不存在" }));
   app.use(express.static(resolve("dist")));
   app.get("/{*path}", (_req, res) => res.sendFile(resolve("dist/index.html")));
@@ -188,9 +189,12 @@ export function createApplication(
       res: express.Response,
       _next: express.NextFunction,
     ) =>
-      res
-        .status(400)
-        .json({ error: error instanceof Error ? error.message : "操作失败" }),
+      res.status(400).json({
+        error: error instanceof Error ? error.message : "操作失败",
+        ...(error instanceof ReliefAnswerError
+          ? { challenge: error.challenge }
+          : {}),
+      }),
   );
   io.use((socket, next) => {
     const account = store.authenticate(cookie(socket.request.headers.cookie));
@@ -243,6 +247,7 @@ export function createApplication(
           data.mode as Mode,
           data.kind,
           personalities,
+          data.baseStake,
         );
         return { room: rooms.project(room, id) };
       }),

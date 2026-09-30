@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from "node:crypto";
 import { deck } from "../shared/cards.ts";
 import { createGame, applyAction, forfeit } from "../shared/engine.ts";
 import { playName } from "../shared/rules.ts";
+import { parseBaseStake, type BaseStake } from "../shared/types.ts";
 import type {
   Account,
   GameAction,
@@ -28,6 +29,7 @@ export interface Room {
   mode: Mode;
   kind: "pve" | "pvp";
   host: string;
+  baseStake: BaseStake;
   version: number;
   seats: (Seat | null)[];
   members: Map<string, string>;
@@ -115,7 +117,9 @@ export class Rooms {
     mode: Mode,
     kind: "pve" | "pvp",
     personalities: Personality[] = ["cautious", "bold"],
+    baseStake: BaseStake = 10,
   ) {
+    baseStake = parseBaseStake(baseStake);
     if (this.current(account.id)) throw new Error("请先离开当前房间");
     if (BigInt(account.balance) === 0n)
       throw new Error("Tokens 已用完，请先领取救济");
@@ -129,6 +133,7 @@ export class Rooms {
       mode,
       kind,
       host: account.id,
+      baseStake,
       version: 0,
       seats: [{ ...account, ready: kind === "pve" }, null, null],
       members: new Map([[account.id, account.name]]),
@@ -209,6 +214,7 @@ export class Rooms {
       shuffled(),
       randomInt(3),
       room.mode === "wild" ? randomInt(3, 16) : null,
+      room.baseStake,
     );
     room.disconnected.clear();
     this.resetTimer(room);
@@ -245,8 +251,18 @@ export class Rooms {
       if (paused(room)) throw new Error("等待断线玩家重连");
       this.act(room, seat, command.action);
     } else {
-      if (active(room)) throw new Error("对局中不能更换座位");
-      if (command.type === "stand") {
+      if (active(room)) throw new Error("对局中不能调整房间");
+      if (command.type === "stake") {
+        if (room.host !== id) throw new Error("只有房主可以修改底注");
+        const baseStake = parseBaseStake(command.baseStake);
+        if (room.baseStake !== baseStake) {
+          room.baseStake = baseStake;
+          // A new stake needs fresh consent from every seated human player.
+          room.seats.forEach((s) => {
+            if (s && !s.bot) s.ready = false;
+          });
+        }
+      } else if (command.type === "stand") {
         if (room.kind === "pve") throw new Error("练习模式请使用离开");
         if (seat >= 0) room.seats[seat] = null;
       } else if (command.type === "sit") {
@@ -307,6 +323,7 @@ export class Rooms {
         shuffled(),
         (next.bidding.first + 1) % 3,
         room.mode === "wild" ? randomInt(3, 16) : null,
+        next.baseStake,
       );
     }
     if (next.phase === "finished") {
@@ -339,6 +356,7 @@ export class Rooms {
         landlord: game.landlord,
         winner: game.winner,
         multiplier: game.multiplier,
+        baseStake: game.baseStake,
         doubles: game.doubles.map((v) => v ?? 1),
         players,
         reason,
@@ -351,6 +369,7 @@ export class Rooms {
         lines,
         replayId: game.id,
         multiplier: game.multiplier,
+        baseStake: game.baseStake,
       };
       room.seats.forEach((s, i) => {
         if (s) s.balance = lines[i].after;
@@ -487,6 +506,7 @@ export class Rooms {
       mode: room.mode,
       kind: room.kind,
       host: room.host,
+      baseStake: room.baseStake,
       version: room.version,
       seats: room.seats.map((s, i) =>
         s
@@ -510,6 +530,7 @@ export class Rooms {
       game: g
         ? {
             id: g.id,
+            baseStake: g.baseStake,
             phase: g.phase,
             landlord: g.landlord,
             turn: g.turn,

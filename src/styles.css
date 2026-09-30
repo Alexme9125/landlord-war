@@ -611,6 +611,43 @@ svg {
   color: var(--ink);
   margin-left: 5px;
 }
+.stake-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.stake-control select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 6px;
+  cursor: pointer;
+}
+.waiting-stake {
+  font-size: 11px;
+  color: var(--muted);
+  gap: 12px;
+}
+.waiting-stake small {
+  font-size: 10px;
+}
+.multiplier .stake-value {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 9px;
+  margin-top: 2px;
+}
+.relief-feedback {
+  color: var(--ink);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.7;
+  margin: 0 0 16px;
+}
 .table-spec button {
   margin-left: auto;
   display: flex;

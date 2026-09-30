@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Store } from "../server/store.js";
+import { Store, ReliefAnswerError } from "../server/store.js";
 
 const opened: Store[] = [];
 const dirs: string[] = [];
@@ -55,6 +55,37 @@ function input(
 }
 
 describe("Store", () => {
+  it.each([10, 20, 50] as const)(
+    "settles stake %i with independent doubles and conserved balances",
+    (baseStake) => {
+      const s = store();
+      const { players } = setup(s);
+      const lines = s.settle(
+        input(players, { baseStake, multiplier: "15", doubles: [2, 1, 2] }),
+      );
+      expect(lines.map((line) => line.delta)).toEqual([
+        String(-baseStake * 90),
+        String(baseStake * 30),
+        String(baseStake * 60),
+      ]);
+      expect(
+        lines.reduce((total, line) => total + BigInt(line.delta), 0n),
+      ).toBe(0n);
+    },
+  );
+
+  it("rejects unsupported stakes without altering wallets", () => {
+    const s = store();
+    const { accounts, players } = setup(s);
+    for (const baseStake of [0, -10, 15, 20.5, "20", null, 1e20]) {
+      expect(() => s.settle(input(players, { baseStake }))).toThrow(
+        "底注只能选择",
+      );
+    }
+    expect(s.getAccount(accounts[0].account.id)?.balance).toBe("100000");
+    expect(s.getHistory(accounts[0].account.id)).toEqual([]);
+  });
+
   it("resets balances up or down to 100K atomically while preserving account history", () => {
     const dir = mkdtempSync(join(tmpdir(), "landlord-reset-"));
     dirs.push(dir);
@@ -222,13 +253,52 @@ describe("Store", () => {
     const challenge = s.createRelief(id);
     const match = challenge.question.match(/^(\d+) \+ (\d+) = \?$/);
     expect(match).not.toBeNull();
-    expect(() => s.claimRelief(id, challenge.id, "wrong")).toThrow("答案");
     const answer = String(Number(match![1]) + Number(match![2]));
     expect(s.claimRelief(id, challenge.id, answer).balance).toBe("10000");
     expect(() => s.claimRelief(id, challenge.id, answer)).toThrow("余额为零");
     expect(() =>
       s.claimRelief(accounts[1].account.id, challenge.id, answer),
     ).toThrow();
+  });
+
+  it("replaces wrong relief answers atomically and invalidates each previous question", () => {
+    const s = store();
+    const { accounts, players } = setup(s);
+    const id = accounts[0].account.id;
+    s.settle(input(players));
+    let challenge = s.createRelief(id);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let error: unknown;
+      try {
+        s.claimRelief(id, challenge.id, "-1");
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(ReliefAnswerError);
+      expect((error as Error).message).toBe("这都答不对的人是不配领救济的");
+      const next = (error as ReliefAnswerError).challenge;
+      expect(next.id).not.toBe(challenge.id);
+      expect(next.question).not.toBe(challenge.question);
+      expect(s.getAccount(id)?.balance).toBe("0");
+      const oldAnswer = challenge.question
+        .match(/\d+/g)!
+        .map(Number)
+        .reduce((a, b) => a + b);
+      expect(() => s.claimRelief(id, challenge.id, String(oldAnswer))).toThrow(
+        "无效或已过期",
+      );
+      challenge = next;
+    }
+    const answer = challenge.question
+      .match(/\d+/g)!
+      .map(Number)
+      .reduce((a, b) => a + b);
+    expect(s.claimRelief(id, challenge.id, String(answer)).balance).toBe(
+      "10000",
+    );
+    expect(() => s.claimRelief(id, challenge.id, String(answer))).toThrow(
+      "余额为零",
+    );
   });
 
   it("expires relief challenges and allows relief after another bankruptcy", () => {

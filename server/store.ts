@@ -3,6 +3,11 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Account, SettlementLine } from "../shared/types.js";
+import {
+  parseBaseStake,
+  type BaseStake,
+  type ReliefChallenge,
+} from "../shared/types.ts";
 
 const STARTING_BALANCE = 100_000n;
 const RELIEF_AMOUNT = 10_000n;
@@ -17,6 +22,7 @@ type SettlementInput = {
   landlord: number;
   winner: "landlord" | "farmers";
   multiplier: string;
+  baseStake?: BaseStake;
   doubles: number[];
   players: { id: string; name: string; balance: string; bot?: boolean }[];
   reason: string;
@@ -35,6 +41,12 @@ type DbChallenge = {
   expires_at: number;
   used_at: number | null;
 };
+
+export class ReliefAnswerError extends Error {
+  constructor(readonly challenge: ReliefChallenge) {
+    super("这都答不对的人是不配领救济的");
+  }
+}
 
 function amount(value: string, label: string): bigint {
   if (!/^(0|[1-9]\d*)$/.test(value)) throw new Error(`${label}必须是非负整数`);
@@ -242,26 +254,35 @@ export class Store {
     return row ? JSON.parse(row.replay) : null;
   }
 
-  createRelief(id: string): { id: string; question: string } {
+  private newReliefChallenge(
+    id: string,
+    previousAnswer?: string,
+  ): ReliefChallenge {
+    const a = (randomBytes(1)[0] % 50) + 1;
+    let b = (randomBytes(1)[0] % 50) + 1;
+    // A different sum guarantees a different question, even if random draws repeat.
+    if (String(a + b) === previousAnswer) b = b === 50 ? 1 : b + 1;
+    const challengeId = randomUUID();
+    this.db
+      .prepare(
+        "INSERT INTO relief_challenges (id, account_id, answer, expires_at) VALUES (?, ?, ?, ?)",
+      )
+      .run(challengeId, id, String(a + b), Date.now() + RELIEF_LIFETIME_MS);
+    return { id: challengeId, question: `${a} + ${b} = ?` };
+  }
+
+  createRelief(id: string): ReliefChallenge {
     return this.transaction(() => {
       const account = this.account(id);
       if (!account) throw new Error("账户不存在");
       if (amount(account.balance, "余额") !== 0n)
         throw new Error("余额为零时才能领取救济");
-      const a = (randomBytes(1)[0] % 50) + 1;
-      const b = (randomBytes(1)[0] % 50) + 1;
-      const challengeId = randomUUID();
-      this.db
-        .prepare(
-          "INSERT INTO relief_challenges (id, account_id, answer, expires_at) VALUES (?, ?, ?, ?)",
-        )
-        .run(challengeId, id, String(a + b), Date.now() + RELIEF_LIFETIME_MS);
-      return { id: challengeId, question: `${a} + ${b} = ?` };
+      return this.newReliefChallenge(id);
     });
   }
 
   claimRelief(id: string, challengeId: string, answer: string): Account {
-    return this.transaction(() => {
+    const result = this.transaction(() => {
       const account = this.account(id);
       if (!account) throw new Error("账户不存在");
       if (amount(account.balance, "余额") !== 0n)
@@ -278,12 +299,15 @@ export class Store {
       ) {
         throw new Error("救济题目无效或已过期");
       }
-      if (String(answer).trim() !== challenge.answer)
-        throw new Error("计算答案不正确");
       const now = Date.now();
       this.db
         .prepare("UPDATE relief_challenges SET used_at = ? WHERE id = ?")
         .run(now, challengeId);
+      if (String(answer).trim() !== challenge.answer) {
+        return new ReliefAnswerError(
+          this.newReliefChallenge(id, challenge.answer),
+        );
+      }
       this.db
         .prepare("UPDATE accounts SET balance = ? WHERE id = ?")
         .run(RELIEF_AMOUNT.toString(), id);
@@ -301,6 +325,9 @@ export class Store {
         );
       return this.account(id)!;
     });
+    // Commit the old question's invalidation and its replacement before reporting a wrong answer.
+    if (result instanceof ReliefAnswerError) throw result;
+    return result;
   }
 
   settle(input: SettlementInput): SettlementLine[] {
@@ -321,6 +348,9 @@ export class Store {
       )
         throw new Error("结算参数无效");
       const multiplier = amount(input.multiplier, "倍数");
+      const baseStake = BigInt(
+        parseBaseStake(input.baseStake === undefined ? 10 : input.baseStake),
+      );
       if (multiplier < 1n || !input.doubles.every((d) => d === 1 || d === 2))
         throw new Error("倍数无效");
       const before = input.players.map((player) => {
@@ -332,7 +362,7 @@ export class Store {
       const farmerSeats = [0, 1, 2].filter((seat) => seat !== input.landlord);
       const obligations = farmerSeats.map(
         (seat) =>
-          10n *
+          baseStake *
           multiplier *
           BigInt(input.doubles[input.landlord]) *
           BigInt(input.doubles[seat]),
