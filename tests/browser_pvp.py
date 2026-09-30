@@ -1,5 +1,6 @@
 """Four isolated browser contexts: complete PVP, watching, seat changes, refresh and forfeit."""
 import os
+import re
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
@@ -44,10 +45,27 @@ with sync_playwright() as p:
     expect(pages[1].get_by_text('你正在观战，有空座时可点击坐下',exact=True)).to_be_visible()
     players=[pages[0],pages[3],pages[2]]
     watcher=pages[1]
+    players[1].get_by_role('button',name='准备好了',exact=True).click()
+    expect(players[1].get_by_role('button',name='取消准备',exact=True)).to_be_visible()
+    pages[0].get_by_label('底注',exact=True).select_option('50')
+    expect(players[1].get_by_role('button',name='准备好了',exact=True)).to_be_visible()
+    for page in pages[1:]:
+        expect(page.locator('.waiting-stake')).to_have_text('底注 50 Tokens · 房主设定')
+        expect(page.get_by_label('底注',exact=True)).to_have_count(0)
+    # Keep the host's controls reachable and clear of player seats on narrow screens.
+    for width in [320,390]:
+        pages[0].set_viewport_size({'width':width,'height':844})
+        expect(pages[0].get_by_label('底注',exact=True)).to_be_visible()
+        assert pages[0].evaluate('document.documentElement.scrollWidth <= innerWidth')
+        pages[0].screenshot(path=str(OUT/f'pvp-stake-{width}.png'),full_page=True)
+    pages[0].set_viewport_size({'width':1280,'height':900})
     for page in players:
         page.get_by_role('button',name='准备好了',exact=True).click()
         page.wait_for_timeout(100)
     expect(players[0].locator('.hand')).to_be_visible()
+    for page in pages:
+        expect(page.locator('.stake-value')).to_have_text('底注 50 Tokens')
+        expect(page.get_by_label('底注',exact=True)).to_have_count(0)
     assert watcher.locator('.hand [data-card]').count()==0
     watcher.screenshot(path=str(OUT/'pvp-spectator.png'),full_page=True)
     # Reload is a real disconnect/reconnect. It must restore the same hand and room.
@@ -73,6 +91,7 @@ with sync_playwright() as p:
         pages[0].wait_for_timeout(100)
     for page in pages:
         expect(page.get_by_role('dialog',name='这一局，落定')).to_be_visible()
+        expect(page.locator('.result-head')).to_contain_text('底注 50 Tokens')
     snapshots=[page.locator('.result-lines').inner_text().replace('你','') for page in pages]
     assert all(text==snapshots[0] for text in snapshots), snapshots
     watcher.get_by_role('button',name='逐手复盘',exact=True).click()
@@ -80,10 +99,24 @@ with sync_playwright() as p:
     players[0].screenshot(path=str(OUT/'pvp-settlement.png'),full_page=True)
     print('PASS full PVP, all four identical settlement, spectator full replay after game',flush=True)
     for page in pages:page.get_by_role('button',name='关闭',exact=True).click()
+    # A high-multiplier 50-Token round can legitimately bankrupt a player.
+    for page in players:
+        if page.locator('.wallet').get_attribute('title') == '0 Tokens':
+            page.locator('.wallet').click()
+            question = page.locator('.arithmetic').inner_text()
+            page.get_by_label('算术题答案').fill(str(sum(map(int, re.findall(r'\d+', question)))))
+            page.get_by_role('button',name='领取 10 KTokens',exact=True).click()
+            expect(page.get_by_role('dialog')).to_have_count(0)
+    pages[0].get_by_label('底注',exact=True).select_option('10')
+    expect(pages[1].locator('.waiting-stake')).to_have_text('底注 10 Tokens · 房主设定')
+    pages[0].get_by_role('button',name='查看上局结果',exact=True).click()
+    expect(pages[0].locator('.result-head')).to_contain_text('底注 50 Tokens')
+    pages[0].get_by_role('button',name='关闭',exact=True).click()
     for page in players:
         page.get_by_role('button',name='准备好了',exact=True).click()
         page.wait_for_timeout(100)
     # Determine landlord, then one player voluntarily leaves; round must end for everyone.
+    expect(pages[0].locator('.stake-value')).to_have_text('底注 10 Tokens')
     for tick in range(50):
         if any(page.get_by_role('button',name='不加倍',exact=True).count() for page in players):break
         for page in players:

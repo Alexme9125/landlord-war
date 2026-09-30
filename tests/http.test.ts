@@ -73,6 +73,133 @@ function acknowledged<T = unknown>(
 }
 
 describe("HTTP and Socket.IO boundary", () => {
+  it("returns a fresh relief question only for a wrong answer to the owner's current challenge", async () => {
+    const { app, request, session, socket } = await fixture();
+    const players = await Promise.all(
+      Array.from({ length: 3 }, () => session()),
+    );
+    const owner = players[0];
+    app.store.settle({
+      id: "relief-bankruptcy",
+      mode: "standard",
+      kind: "pvp",
+      landlord: 0,
+      winner: "farmers",
+      multiplier: "10000",
+      doubles: [1, 1, 1],
+      reason: "正常结束",
+      replay: {},
+      players: players.map(({ account }, index) => ({
+        ...account,
+        name: String(index),
+      })),
+    });
+    const post = (path: string, cookie: string, body: unknown) =>
+      request(path, {
+        method: "POST",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const first = await (await post("/api/relief", owner.cookie, {})).json();
+    expect(
+      (await post("/api/relief/claim", "", { id: first.id, answer: "-1" }))
+        .status,
+    ).toBe(401);
+    const other = await post("/api/relief/claim", players[1].cookie, {
+      id: first.id,
+      answer: "-1",
+    });
+    expect(other.status).toBe(400);
+    expect(await other.json()).not.toHaveProperty("challenge");
+    const wrong = await post("/api/relief/claim", owner.cookie, {
+      id: first.id,
+      answer: "-1",
+    });
+    expect(wrong.status).toBe(400);
+    const { error, challenge } = await wrong.json();
+    expect(error).toBe("这都答不对的人是不配领救济的");
+    expect(challenge.id).not.toBe(first.id);
+    expect(challenge.question).not.toBe(first.question);
+    expect(app.store.getAccount(owner.account.id)?.balance).toBe("0");
+    const retry = await post("/api/relief/claim", owner.cookie, {
+      id: first.id,
+      answer: "-1",
+    });
+    expect(retry.status).toBe(400);
+    expect(await retry.json()).toEqual({ error: "救济题目无效或已过期" });
+    const tab = socket(owner.cookie);
+    cleanup.push(async () => {
+      tab.disconnect();
+    });
+    await connected(tab);
+    let updated: Account | null = null;
+    tab.on("account", (account) => {
+      updated = account;
+    });
+    const answer = challenge.question
+      .match(/\d+/g)
+      .map(Number)
+      .reduce((a: number, b: number) => a + b);
+    const success = await post("/api/relief/claim", owner.cookie, {
+      id: challenge.id,
+      answer,
+    });
+    expect(success.status).toBe(200);
+    expect(await success.json()).toMatchObject({
+      id: owner.account.id,
+      balance: "10000",
+    });
+    await expect.poll(() => updated?.balance).toBe("10000");
+    expect(
+      (
+        await post("/api/relief/claim", owner.cookie, {
+          id: challenge.id,
+          answer,
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it("validates stake values on room creation and defaults older clients to 10", async () => {
+    const { session, socket } = await fixture();
+    const owner = await session();
+    const client = socket(owner.cookie);
+    cleanup.push(async () => {
+      client.disconnect();
+    });
+    await connected(client);
+    for (const baseStake of [null, "20", 0, 15, 50.5]) {
+      const result = await acknowledged<{ ok: boolean; error: string }>(
+        client,
+        "room.create",
+        { mode: "standard", kind: "pvp", baseStake },
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        error: "底注只能选择 10、20 或 50 Tokens",
+      });
+    }
+    for (const baseStake of [undefined, 20, 50]) {
+      const result = await acknowledged<{ ok: boolean; room: RoomView }>(
+        client,
+        "room.create",
+        { mode: "standard", kind: "pvp", baseStake },
+      );
+      expect(result.ok).toBe(true);
+      expect(result.room.baseStake).toBe(baseStake ?? 10);
+      const leave = await acknowledged<{ ok: boolean }>(
+        client,
+        "room.command",
+        {
+          id: `leave-${baseStake}`,
+          version: result.room.version,
+          command: { type: "leave" },
+        },
+      );
+      expect(leave.ok).toBe(true);
+    }
+  });
+
   it("requires authenticated same-origin confirmation and syncs a reset only to the owner's tabs", async () => {
     const { app, request, session, socket } = await fixture();
     const players = await Promise.all(
@@ -173,13 +300,11 @@ describe("HTTP and Socket.IO boundary", () => {
         body: JSON.stringify({ confirmed: true }),
       });
     expect((await reset(0)).status).toBe(409);
-    accounts
-      .slice(0, 3)
-      .forEach((account, index) =>
-        app.rooms.command(account.id, room.version, `ready-${index}`, {
-          type: "ready",
-        }),
-      );
+    accounts.slice(0, 3).forEach((account, index) =>
+      app.rooms.command(account.id, room.version, `ready-${index}`, {
+        type: "ready",
+      }),
+    );
     const game = structuredClone(room.game);
     const version = room.version;
     for (let index = 0; index < players.length; index++) {

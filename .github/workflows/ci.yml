@@ -73,6 +73,10 @@ jobs:
         run: python tests/browser_smoke.py
       - name: Complete PVP with three players and a spectator
         run: python tests/browser_pvp.py
+      - name: Relief wrong-answer rotation and payment
+        run: |
+          docker exec darwin-ci node --import tsx tests/seed_relief.ts /app/data/game.sqlite > /tmp/darwin-relief.json
+          RELIEF_FIXTURE=/tmp/darwin-relief.json python tests/browser_relief.py
       - name: Chromium, WebKit and Firefox interaction checks
         run: python tests/browser_engines.py
       - name: Collect container log

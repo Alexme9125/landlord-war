@@ -1,4 +1,15 @@
 export type Mode = "standard" | "wild";
+export const BASE_STAKES = [10, 20, 50] as const;
+export type BaseStake = (typeof BASE_STAKES)[number];
+export function parseBaseStake(value: unknown): BaseStake {
+  if (!BASE_STAKES.includes(value as BaseStake))
+    throw new Error("底注只能选择 10、20 或 50 Tokens");
+  return value as BaseStake;
+}
+export interface ReliefChallenge {
+  id: string;
+  question: string;
+}
 export type Personality = "cautious" | "balanced" | "bold";
 export type Suit = "S" | "H" | "C" | "D" | "J";
 export interface Card {
@@ -52,6 +63,7 @@ export interface GameEvent {
 export interface GameState {
   id: string;
   mode: Mode;
+  baseStake: BaseStake;
   phase: "bidding" | "doubling" | "playing" | "finished" | "redeal";
   hands: Card[][];
   initialHands: Card[][];
@@ -107,18 +119,21 @@ export interface ResultView {
   lines: SettlementLine[];
   replayId: string;
   multiplier: string;
+  baseStake: BaseStake;
 }
 export interface RoomView {
   code: string;
   mode: Mode;
   kind: "pve" | "pvp";
   host: string;
+  baseStake: BaseStake;
   version: number;
   seats: (PlayerView | null)[];
   spectators: { id: string; name: string }[];
   mySeat: number;
   game: null | {
     id: string;
+    baseStake: BaseStake;
     phase: GameState["phase"];
     landlord: number;
     turn: number;
@@ -139,6 +154,7 @@ export interface RoomView {
 }
 export type RoomCommand =
   | { type: "ready" }
+  | { type: "stake"; baseStake: BaseStake }
   | { type: "sit"; seat: number }
   | { type: "stand" }
   | { type: "leave" }

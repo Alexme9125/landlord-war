@@ -1,4 +1,5 @@
 import type { Card, GameAction, GameState, Mode, Play } from "./types.ts";
+import { parseBaseStake, type BaseStake } from "./types.ts";
 import { sortCards } from "./cards.ts";
 import { beats, bombLevel, bottomBonus, interpret, playName } from "./rules.ts";
 
@@ -8,6 +9,7 @@ export function createGame(
   shuffled: Card[],
   first: number,
   wildRank: number | null,
+  baseStake: BaseStake = 10,
 ): GameState {
   if (shuffled.length !== 54 || new Set(shuffled.map((c) => c.id)).size !== 54)
     throw new Error("牌组无效");
@@ -17,6 +19,7 @@ export function createGame(
   return {
     id,
     mode,
+    baseStake: parseBaseStake(baseStake),
     phase: "bidding",
     hands,
     initialHands: structuredClone(hands),

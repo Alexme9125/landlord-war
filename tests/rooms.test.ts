@@ -48,6 +48,113 @@ function setup(mode: Mode = "standard") {
 }
 
 describe("Rooms", () => {
+  it("lets only the host change supported stakes before play and clears human readiness", () => {
+    const { store, accounts, room, rooms, send, start } = setup();
+    try {
+      expect(room.baseStake).toBe(10);
+      for (const account of [accounts[1], accounts[3]])
+        expect(() => send(account, { type: "stake", baseStake: 50 })).toThrow(
+          "只有房主",
+        );
+      for (const value of [0, 15, 20.5, "20", null, undefined])
+        expect(() =>
+          send(accounts[0], { type: "stake", baseStake: value } as RoomCommand),
+        ).toThrow("底注只能选择");
+      send(accounts[1], { type: "ready" });
+      const stale = room.version;
+      send(accounts[0], { type: "stake", baseStake: 50 });
+      expect(room.seats.slice(0, 3).map((s) => s?.ready)).toEqual([
+        false,
+        false,
+        false,
+      ]);
+      expect(() => send(accounts[2], { type: "ready" }, stale)).toThrow(
+        "牌桌已更新",
+      );
+      for (const account of accounts)
+        expect(rooms.project(room, account.id).baseStake).toBe(50);
+      send(accounts[1], { type: "ready" });
+      send(accounts[0], { type: "stake", baseStake: 50 });
+      expect(room.seats[1]?.ready).toBe(true);
+      send(accounts[1], { type: "ready" });
+      start();
+      expect(room.game).toMatchObject({ baseStake: 50, multiplier: "15" });
+      expect(() => send(accounts[0], { type: "stake", baseStake: 20 })).toThrow(
+        "对局中",
+      );
+      expect(room.baseStake).toBe(50);
+    } finally {
+      store.close();
+    }
+  });
+
+  it.each(["standard", "wild"] as const)(
+    "preserves %s stakes through redeal, settlement and replay while allowing the next round to change",
+    (mode) => {
+      const { store, accounts, room, rooms, send, start, landlord } =
+        setup(mode);
+      try {
+        send(accounts[0], { type: "stake", baseStake: 50 });
+        start();
+        for (let i = 0; i < 3; i++)
+          send(accounts[room.game!.turn], {
+            type: "game",
+            action: { type: "bid", yes: false },
+          });
+        expect(room.game).toMatchObject({
+          phase: "bidding",
+          baseStake: 50,
+          multiplier: "15",
+        });
+        const landlordSeat = landlord();
+        const gameId = room.game!.id;
+        const pairAmount = 50n * BigInt(room.game!.multiplier);
+        send(accounts[1], { type: "leave" });
+        expect(room.result?.baseStake).toBe(50);
+        expect(room.result?.lines[landlordSeat].delta).toBe(
+          String(pairAmount * (landlordSeat === 1 ? -2n : 2n)),
+        );
+        const result = structuredClone(room.result);
+        send(accounts[0], { type: "stake", baseStake: 20 });
+        expect(room.game?.baseStake).toBe(50);
+        expect(room.result).toEqual(result);
+        expect(store.getReplay(gameId, accounts[0].id)).toMatchObject({
+          game: { baseStake: 50 },
+        });
+        expect(rooms.spectatorReplay(accounts[3].id, gameId)).toMatchObject({
+          game: { baseStake: 50 },
+        });
+        rooms.join(store.getAccount(accounts[1].id)!, room.code);
+        start();
+        expect(room.game).toMatchObject({ baseStake: 20, multiplier: "15" });
+        expect(room.result).toBeNull();
+      } finally {
+        store.close();
+      }
+    },
+  );
+
+  it("applies the selected stake to immediate PVE and transfers control to the next host", () => {
+    const { store, accounts, room, rooms, send } = setup();
+    try {
+      send(accounts[0], { type: "stake", baseStake: 20 });
+      send(accounts[0], { type: "leave" });
+      expect(room.host).toBe(accounts[1].id);
+      send(accounts[1], { type: "stake", baseStake: 50 });
+      const pve = rooms.create(
+        accounts[0],
+        "wild",
+        "pve",
+        ["balanced", "cautious"],
+        20,
+      );
+      expect(pve.game).toMatchObject({ baseStake: 20, multiplier: "15" });
+      expect(rooms.project(pve, accounts[0].id).game?.baseStake).toBe(20);
+    } finally {
+      store.close();
+    }
+  });
+
   it("renames seated players and spectators without changing identity or an active round", () => {
     const { store, accounts, rooms, room, start, updates } = setup();
     try {

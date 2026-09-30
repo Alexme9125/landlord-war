@@ -4,7 +4,7 @@
 
 ## 自动化
 
-`npm test`：7 个测试文件、79 项测试通过。覆盖：
+`npm test`：7 个测试文件、90 项测试通过。覆盖：
 
 - 全部牌型、癞子明确解释、软硬炸等级、带牌限制、底牌最高奖励、叫抢与重发、个人加倍隐私、春天 / 反春天、随机完整对局与牌数守恒。
 - 三种 AI 人格的合法动作和实际策略差异、公开信息采样、农民配合、候选超过搜索上限时仍优先找直接出完的手牌。
@@ -13,6 +13,8 @@
 - 同源 HTTP / Socket 握手、拒绝外国来源、没有 Origin 的同源轮询、非法动作输入；持久化失败时保留原回合状态，可重试完成结算。
 - 昵称写入与玩家 / 观众 / 同账户多窗口同步，非法昵称不产生修改；对局中改名保持手牌、计时、座位和余额，历史回放与结算名字不变。
 - Tokens 重置固定为 100000：余额高于或低于目标均正确处理，重复请求不累加；事务账目、跨重启持久化、身份与战绩保留、救济题目作废、认证与来源校验、房间内拒绝重置、同账户多窗口同步。
+- 底注 10 / 20 / 50 的授权与输入校验、默认 10、修改后清空真人准备、过期准备拒绝、开局锁定、无人叫地主重发保留底注、按底注实际结算、房主转移、下一局底注不覆盖旧结算与回放。
+- 救济答错文案、原子作废旧题并生成不同新题、旧题不可重试、连续换题不改余额、新题答对后仅发放一次、领取后同账户多窗口同步。
 
 Node 24.21.0 下的 TypeScript 检查、Vitest 和 Vite 生产构建均通过。生产模式单进程服务在本机启动，提供构建后的网页及同源 API / Socket。
 
@@ -30,12 +32,14 @@ Node 24.21.0 下的 TypeScript 检查、Vitest 和 Vite 生产构建均通过。
 | PVP：刷新重连 | 同房间、同一手牌恢复，未重复发牌 |
 | PVP：确定地主后主动离开 | 其他端立即收到判负结果 |
 | PVP：观众赛后全牌回放 | 通过 |
+| 底注：20 Tokens PVE、50 Tokens PVP，赛后修改为 10 | HUD、结算、回放一致；四端同步，开局无编辑入口；旧结算保留 50，下一局使用 10 |
+| 救济：连续两次答错 → 自动换题 → 答对 | 指定文案、不同新题、输入清空并聚焦；答对到账 10K，多窗口与刷新一致 |
 | Chromium / WebKit：390px、320px 竖屏 | 无横向溢出，双排手牌 |
 | Chromium / WebKit：844 × 390 横屏 | 单排手牌完整落在可视高度内 |
 | Chromium / WebKit：触摸选牌、取消 | 通过 |
 | WebKit / Firefox：生产服务身份、联机、PVE、主题、出牌选择与离开 | 通过，无 JavaScript 运行错误 |
 
-对应脚本：`tests/browser_nickname.py`、`tests/browser_smoke.py`、`tests/browser_pvp.py`、`tests/browser_engines.py`。这些脚本使用真实界面和隔离游客身份，Tokens 重置通过玩家可用的正式流程验收，没有测试专用的余额修改后门。
+对应脚本：`tests/browser_nickname.py`、`tests/browser_smoke.py`、`tests/browser_pvp.py`、`tests/browser_engines.py`、`tests/browser_relief.py`。使用真实界面与同源服务。救济脚本的零余额账户通过 `tests/seed_relief.ts` 在隔离测试数据库内预置，再通过正式界面与接口作答；生产服务未增加测试接口。Tokens 重置通过玩家可用的正式流程验收。
 
 ## 截图
 
@@ -49,6 +53,8 @@ Node 24.21.0 下的 TypeScript 检查、Vitest 和 Vite 生产构建均通过。
 - [320px 长昵称显示](screenshots/nickname-mobile.png)
 - [320px 重置首次确认](screenshots/token-reset-first.png)
 - [320px 重置最终确认](screenshots/token-reset-second.png)
+- [320px 房主选择底注](screenshots/room-stake.png)
+- [320px 救济答错与新题](screenshots/relief-retry.png)
 
 ## 验证边界
 
