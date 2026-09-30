@@ -85,7 +85,7 @@ with sync_playwright() as p:
         hint=page.get_by_role('button',name='提示',exact=True)
         if not acted and hint.count() and hint.is_enabled():
             hint.click()
-            page.wait_for_timeout(100)
+            expect(hint).to_be_enabled(timeout=10000)
             if not click_visible(page,'出牌'):
                 click_visible(page,'不出')
             else:

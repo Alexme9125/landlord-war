@@ -89,7 +89,9 @@ with sync_playwright() as p:
             for name in ['叫地主','抢地主 ×2','不加倍']:
                 if do_if_enabled(page,name):acted=True;break
             if not acted and do_if_enabled(page,'提示'):
-                page.wait_for_timeout(75)
+                # Wait for the hint acknowledgement; dual-wildcard search can
+                # exceed a fixed delay on CI while all actions remain disabled.
+                expect(page.get_by_role('button',name='提示',exact=True)).to_be_enabled(timeout=10000)
                 if not do_if_enabled(page,'出牌'):
                     do_if_enabled(page,'不出')
                 elif page.get_by_role('dialog',name='选择这手牌的解释').count():

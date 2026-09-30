@@ -49,6 +49,8 @@ Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产�
 
 对应脚本：`tests/browser_nickname.py`、`tests/browser_smoke.py`、`tests/browser_pvp.py`、`tests/browser_engines.py`、`tests/browser_relief.py`、`tests/browser_heaven_bomb.py`。PVE / PVP 脚本支持 `GAME_MODE_LABEL=天地癞子`。使用真实界面与同源服务。救济脚本的零余额账户通过 `tests/seed_relief.ts` 在隔离测试数据库内预置；十二张炸弹通过 `tests/serve_heaven_fixture.ts` 独立 CLI 在隔离数据库内预置合法的 54 张牌，再通过正式界面与接口出牌。生产服务未增加测试接口。Tokens 重置通过玩家可用的正式流程验收。
 
+完整对局脚本等待提示计算完成、操作按钮恢复后再出牌，避免固定毫秒延迟在较慢的 CI 运行器上跳过出牌。另在隔离本地服务将每次提示计算延迟 250 毫秒，完整天地癞子 PVE / PVP、结算与复盘均通过。
+
 ## 截图
 
 - [浅色主界面](screenshots/home-light.png)
