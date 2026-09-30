@@ -6,13 +6,14 @@ import {
   type ReactNode,
 } from "react";
 import { X } from "lucide-react";
-import type { Card } from "../shared/types.ts";
-import { rankText, suitText } from "../shared/cards.ts";
+import type { Card, Wildcards } from "../shared/types.ts";
+import { isWildRank, rankText, suitText } from "../shared/cards.ts";
 
 export function CardFace({
   card,
   small = false,
   wild = false,
+  wildLabel = "癞",
   as,
   selected = false,
   onDown,
@@ -23,6 +24,7 @@ export function CardFace({
   card: Card;
   small?: boolean;
   wild?: boolean;
+  wildLabel?: "癞" | "天" | "地";
   as?: number;
   selected?: boolean;
   onDown?: (e: React.PointerEvent<HTMLButtonElement>) => void;
@@ -58,12 +60,12 @@ export function CardFace({
       </span>
       {wild && (
         <span className="wild-badge">
-          {as && as !== card.rank ? "→" + rankText(as) : "癞"}
+          {as && as !== card.rank ? "→" + rankText(as) : wildLabel}
         </span>
       )}
     </>
   );
-  const label = `${card.rank >= 16 ? "" : suitText[card.suit]}${rankText(card.rank)}${wild ? " 癞子" : ""}${as && as !== card.rank ? " 作为" + rankText(as) : ""}`;
+  const label = `${card.rank >= 16 ? "" : suitText[card.suit]}${rankText(card.rank)}${wild ? " " + (wildLabel === "癞" ? "癞子" : wildLabel + "癞子") : ""}${as && as !== card.rank ? " 作为" + rankText(as) : ""}`;
   const props = {
     className: `playing-card ${red ? "red" : "black"} ${small ? "small" : ""} ${selected ? "selected" : ""} ${wild ? "is-wild" : ""} ${fromBottom ? "from-bottom" : ""}`,
     style: { "--card-index": index ?? 0 } as CSSProperties,
@@ -94,13 +96,15 @@ export function Hand({
   selected,
   setSelected,
   wild,
+  heavenRank = null,
   disabled = false,
   bottomIds = [],
 }: {
   cards: Card[];
   selected: string[];
   setSelected: (s: string[]) => void;
-  wild: number | null;
+  wild: Wildcards;
+  heavenRank?: number | null;
   disabled?: boolean;
   bottomIds?: string[];
 }) {
@@ -158,7 +162,14 @@ export function Hand({
             <CardFace
               key={card.id}
               card={card}
-              wild={card.rank === wild}
+              wild={isWildRank(card.rank, wild)}
+              wildLabel={
+                heavenRank === null
+                  ? "癞"
+                  : card.rank === heavenRank
+                    ? "天"
+                    : "地"
+              }
               selected={selected.includes(card.id)}
               index={ri * 10 + i}
               fromBottom={bottomIds.includes(card.id)}

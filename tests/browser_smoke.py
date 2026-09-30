@@ -4,6 +4,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 BASE = os.environ.get('GAME_URL', 'http://127.0.0.1:5187')
+MODE_LABEL = os.environ.get('GAME_MODE_LABEL', '癞子玩法')
 OUT = Path(os.environ.get('SCREENSHOT_DIR', '/tmp/landlord-screenshots'))
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -36,8 +37,11 @@ with sync_playwright() as p:
     page.get_by_role('button', name='切换深色主题').click()
     expect(page.locator('html')).to_have_attribute('data-theme', 'dark')
     screenshot(page, 'home-dark-desktop')
-    page.get_by_role('button', name='癞子玩法', exact=True).click()
-    expect(page.get_by_role('button', name='癞子玩法', exact=True)).to_have_attribute('aria-pressed','true')
+    page.get_by_role('button', name=MODE_LABEL, exact=True).click()
+    expect(page.get_by_role('button', name=MODE_LABEL, exact=True)).to_have_attribute('aria-pressed','true')
+    page.reload()
+    expect(page.get_by_role('button', name=MODE_LABEL, exact=True)).to_have_attribute('aria-pressed','true')
+    expect(page.locator('html')).to_have_attribute('data-theme','dark')
     page.get_by_role('button', name='创建房间', exact=True).click()
     expect(page.get_by_text('留个位置，等你来')).to_be_visible()
     expect(page.get_by_role('button', name='重置 Tokens', exact=True)).to_have_count(0)
@@ -51,6 +55,9 @@ with sync_playwright() as p:
     page.get_by_label('底注', exact=True).select_option('20')
     page.get_by_role('button', name='开始练习',exact=True).click()
     expect(page.locator('.hand')).to_be_visible()
+    if MODE_LABEL == '天地癞子':
+        expect(page.get_by_label('天地癞子点数')).to_contain_text('地癞子 待定')
+        assert page.locator('.hand .is-wild').count() == page.locator('.hand [aria-label*="天癞子"]').count()
     expect(page.locator('.stake-value')).to_have_text('底注 20 Tokens')
     expect(page.get_by_role('button', name='重置 Tokens', exact=True)).to_have_count(0)
     screenshot(page, 'game-light-390')
@@ -92,6 +99,12 @@ with sync_playwright() as p:
     screenshot(page,'pve-settlement')
     page.get_by_role('button',name='逐手复盘',exact=True).click()
     expect(page.get_by_role('dialog',name='逐手复盘')).to_be_visible()
+    if MODE_LABEL == '天地癞子':
+        expect(page.locator('.replay-explanation')).to_contain_text('天癞子')
+        expect(page.locator('.replay-explanation')).to_contain_text('地癞子')
+        assert page.locator('.replay-hands [aria-label*="天癞子"]').count() in [1,2,3,4]
+        # Before collecting bottom cards, a few earth wildcards may still be in the bottom.
+        assert page.locator('.replay-hands [aria-label*="地癞子"]').count() in [1,2,3,4]
     expect(page.locator('.replay-explanation')).to_contain_text('底注 20 Tokens')
     page.get_by_role('button',name='下一步').click()
     screenshot(page,'pve-replay')

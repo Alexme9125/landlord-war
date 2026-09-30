@@ -86,6 +86,54 @@ describe("Store", () => {
     expect(s.getHistory(accounts[0].account.id)).toEqual([]);
   });
 
+  it("persists heaven-earth history and replay while rejecting unknown settlement modes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "landlord-heaven-earth-"));
+    dirs.push(dir);
+    const path = join(dir, "game.sqlite");
+    const first = store(path);
+    const { accounts, players } = setup(first);
+    const replay = {
+      mode: "heaven-earth",
+      game: {
+        mode: "heaven-earth",
+        heavenRank: 7,
+        wildRank: 11,
+        baseStake: 20,
+      },
+    };
+    expect(() =>
+      first.settle(input(players, { id: "invalid-mode", mode: "other" })),
+    ).toThrow("结算参数无效");
+    expect(first.getHistory(accounts[0].account.id)).toEqual([]);
+    expect(first.getAccount(accounts[0].account.id)?.balance).toBe("100000");
+
+    const lines = first.settle(
+      input(players, {
+        id: "heaven-earth-game",
+        mode: "heaven-earth",
+        baseStake: 20,
+        multiplier: "15",
+        doubles: [1, 1, 1],
+        replay,
+      }),
+    );
+    expect(lines.map((line) => line.delta)).toEqual(["-600", "300", "300"]);
+    first.close();
+    opened.pop();
+    const reopened = store(path);
+    expect(reopened.getHistory(accounts[0].account.id)[0]).toMatchObject({
+      id: "heaven-earth-game",
+      mode: "heaven-earth",
+      delta: "-600",
+    });
+    expect(
+      reopened.getReplay("heaven-earth-game", accounts[0].account.id),
+    ).toEqual(replay);
+    expect(
+      reopened.getReplay("heaven-earth-game", accounts[3].account.id),
+    ).toBeNull();
+  });
+
   it("resets balances up or down to 100K atomically while preserving account history", () => {
     const dir = mkdtempSync(join(tmpdir(), "landlord-reset-"));
     dirs.push(dir);

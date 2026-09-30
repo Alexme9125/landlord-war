@@ -5,8 +5,9 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 BASE=os.environ.get('GAME_URL','http://127.0.0.1:5187')
-OUT=Path('/tmp/landlord-screenshots')
-OUT.mkdir(exist_ok=True)
+MODE_LABEL=os.environ.get('GAME_MODE_LABEL','标准玩法')
+OUT=Path(os.environ.get('SCREENSHOT_DIR','/tmp/landlord-screenshots'))
+OUT.mkdir(parents=True,exist_ok=True)
 
 def do_if_enabled(page,name):
     btn=page.get_by_role('button',name=name,exact=True)
@@ -30,6 +31,7 @@ with sync_playwright() as p:
         page.get_by_role('button',name='保存昵称',exact=True).click()
         expect(page.get_by_text('昵称已保存',exact=True)).to_be_visible()
         page.get_by_role('button',name='关闭',exact=True).click()
+    pages[0].get_by_role('button',name=MODE_LABEL,exact=True).click()
     pages[0].get_by_role('button',name='创建房间',exact=True).click()
     expect(pages[0].locator('.invite-code b')).to_be_visible()
     code=pages[0].locator('.invite-code b').inner_text()
@@ -37,6 +39,7 @@ with sync_playwright() as p:
         page.get_by_role('textbox',name='六位房间码').fill(code)
         page.get_by_role('button',name='加入房间',exact=True).click()
         expect(page.locator('.room-title')).to_be_visible()
+        if MODE_LABEL == '天地癞子': expect(page.locator('.mode-pill')).to_have_text('天地癞子')
     expect(pages[3].get_by_text('你正在观战，有空座时可点击坐下',exact=True)).to_be_visible()
     pages[1].get_by_role('button',name='站起观战',exact=True).click()
     expect(pages[3].get_by_role('button',name='空座 · 坐下',exact=True)).to_be_enabled()
@@ -63,6 +66,10 @@ with sync_playwright() as p:
         page.get_by_role('button',name='准备好了',exact=True).click()
         page.wait_for_timeout(100)
     expect(players[0].locator('.hand')).to_be_visible()
+    if MODE_LABEL == '天地癞子':
+        labels=[page.get_by_label('天地癞子点数').inner_text() for page in pages]
+        assert len(set(labels))==1,labels
+        assert '待定' in labels[0]
     for page in pages:
         expect(page.locator('.stake-value')).to_have_text('底注 50 Tokens')
         expect(page.get_by_label('底注',exact=True)).to_have_count(0)

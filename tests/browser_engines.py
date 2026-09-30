@@ -26,10 +26,22 @@ with sync_playwright() as p:
         expect(page.locator('html')).to_have_attribute('data-theme','dark')
         page.reload()
         expect(page.locator('html')).to_have_attribute('data-theme','dark')
-        page.get_by_role('button',name='癞子玩法',exact=True).click()
+        page.get_by_role('button',name='天地癞子',exact=True).click()
+        expect(page.locator('html')).to_have_attribute('data-theme','dark')
+        page.reload()
+        expect(page.get_by_role('button',name='天地癞子',exact=True)).to_have_attribute('aria-pressed','true')
+        expect(page.locator('html')).to_have_attribute('data-theme','dark')
+        if mobile:
+            for width in [320,390]:
+                page.set_viewport_size({'width':width,'height':844})
+                hero=page.locator('.table-hero').bounding_box()
+                spec=page.locator('.table-spec').bounding_box()
+                cards=page.locator('.hero-card').evaluate_all('(els)=>els.map(e=>e.getBoundingClientRect().toJSON())')
+                assert all(c['left']>=hero['x'] and c['right']<=hero['x']+hero['width'] and c['bottom']<=spec['y'] for c in cards), cards
         page.screenshot(path=str(OUT/f'{name}-production-home.png'),full_page=True)
         page.get_by_role('button',name='开始练习',exact=True).click()
         expect(page.locator('.hand [data-card]').first).to_be_visible()
+        expect(page.get_by_label('天地癞子点数')).to_be_visible()
         expect(page.locator('html')).to_have_attribute('data-theme','dark')
         card=page.locator('.hand [data-card]').first
         if mobile:

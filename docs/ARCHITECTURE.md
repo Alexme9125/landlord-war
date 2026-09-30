@@ -44,9 +44,13 @@
 
 失败 ack 为 `{ok:false,error}`。`id` 为每个动作的 UUID，`version` 为最近收到的房间版本。除独立加倍选择和退出外，过期版本拒绝。重复成功动作不会再次应用。
 
-`command` 包括 `ready`、`stand`、`sit {seat}`、`leave`、`stake {baseStake}`、`game {action}`。`stake` 仅房主可在非游戏期间设置为 10 / 20 / 50，改变数值后清除真人准备状态。`RoomView.baseStake` 是下一次开局的底注，`game.baseStake` 与 `result.baseStake` 是原局固定值。游戏动作包括 `bid {yes}`、`double {yes}`、`pass`、`play {cardIds,as?}`。`as` 与物理牌 ID 一一对应，明确指定癞子替代；客户端不能发送自己的牌面对象代替服务器牌。
+`mode` 可选 `standard`、`wild`、`heaven-earth`。三个模式共用房间、结算与回放格式。
 
-`RoomView` 仅包含自己的手牌、公开底牌、公开事件、各座位剩余张数、倍率、计时和结果。底牌与癞子点数在确定地主前隐藏；个人加倍结果在三人决定前隐藏；AI 解释仅赛后进入复盘。完整暗牌状态从不广播。
+`command` 包括 `ready`、`stand`、`sit {seat}`、`leave`、`stake {baseStake}`、`game {action}`。`stake` 仅房主可在非游戏期间设置为 10 / 20 / 50，改变数值后清除真人准备状态。`RoomView.baseStake` 是下一次开局的底注，`game.baseStake` 与 `result.baseStake` 是原局固定值。游戏动作包括 `bid {yes}`、`double {yes}`、`pass`、`play {cardIds,as?,kind?,main?}`。`as` 与物理牌 ID 一一对应；`kind/main` 指定有歧义时的牌型与主体，服务器只接受这些牌确实能组成的解释。客户端不能发送自己的牌面对象代替服务器牌。
+
+`RoomView` 仅包含自己的手牌、公开底牌、公开事件、各座位剩余张数、倍率、计时和结果。`heavenRank` 为天地模式的天癞子，发牌后公开；`wildRank` 为四癞子点数或天地模式的地癞子，与底牌一起在确定地主后公开。其他模式的 `heavenRank` 为 `null`，旧回放没有该字段时按无天癞子处理。AI 使用同样的公开范围。个人加倍结果在三人决定前隐藏；AI 解释仅赛后进入复盘。完整暗牌状态从不广播。
+
+隐式癞子解释按合法主体与翼牌模板匹配，避免八张癞子逐一枚举替代点数。牌型、主体点数和长度相同的解释保留一种尽量使用原点数的翼牌组合；显式 `as` 仍完整验证。提示与 AI 支持两种癞子、长炸及混合癞子炸，先扫描直接收尾候选，再进行有上限的策略评分。
 
 ## 持久化边界
 

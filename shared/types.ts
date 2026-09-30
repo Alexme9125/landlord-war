@@ -1,4 +1,12 @@
-export type Mode = "standard" | "wild";
+export const MODES = ["standard", "wild", "heaven-earth"] as const;
+export type Mode = (typeof MODES)[number];
+export const MODE_NAMES: Record<Mode, string> = {
+  standard: "标准玩法",
+  wild: "癞子玩法",
+  "heaven-earth": "天地癞子",
+};
+/** A rank for the original four-wild mode, or both ranks for heaven/earth. */
+export type Wildcards = number | null | readonly number[];
 export const BASE_STAKES = [10, 20, 50] as const;
 export type BaseStake = (typeof BASE_STAKES)[number];
 export function parseBaseStake(value: unknown): BaseStake {
@@ -33,6 +41,7 @@ export type PlayKind =
   | "softBomb"
   | "bomb"
   | "wildBomb"
+  | "mixedWildBomb"
   | "rocket";
 export interface Play {
   cards: Card[];
@@ -49,7 +58,13 @@ export interface MultiplierEvent {
 export type GameAction =
   | { type: "bid"; yes: boolean }
   | { type: "double"; yes: boolean }
-  | { type: "play"; cardIds: string[]; as?: number[] }
+  | {
+      type: "play";
+      cardIds: string[];
+      as?: number[];
+      kind?: PlayKind;
+      main?: number;
+    }
   | { type: "pass" };
 export interface GameEvent {
   index: number;
@@ -69,6 +84,7 @@ export interface GameState {
   initialHands: Card[][];
   bottom: Card[];
   wildRank: number | null;
+  heavenRank: number | null;
   landlord: number;
   turn: number;
   doubles: (1 | 2 | null)[];
@@ -141,6 +157,7 @@ export interface RoomView {
     hand: Card[];
     bottom: Card[];
     wildRank: number | null;
+    heavenRank: number | null;
     multiplier: string;
     multiplierEvents: MultiplierEvent[];
     trick: GameState["trick"];

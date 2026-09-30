@@ -4,7 +4,7 @@
 
 ## 自动化
 
-`npm test`：7 个测试文件、90 项测试通过。覆盖：
+`npm test`：8 个测试文件、116 项测试通过。覆盖：
 
 - 全部牌型、癞子明确解释、软硬炸等级、带牌限制、底牌最高奖励、叫抢与重发、个人加倍隐私、春天 / 反春天、随机完整对局与牌数守恒。
 - 三种 AI 人格的合法动作和实际策略差异、公开信息采样、农民配合、候选超过搜索上限时仍优先找直接出完的手牌。
@@ -15,8 +15,11 @@
 - Tokens 重置固定为 100000：余额高于或低于目标均正确处理，重复请求不累加；事务账目、跨重启持久化、身份与战绩保留、救济题目作废、认证与来源校验、房间内拒绝重置、同账户多窗口同步。
 - 底注 10 / 20 / 50 的授权与输入校验、默认 10、修改后清空真人准备、过期准备拒绝、开局锁定、无人叫地主重发保留底注、按底注实际结算、房主转移、下一局底注不覆盖旧结算与回放。
 - 救济答错文案、原子作废旧题并生成不同新题、旧题不可重试、连续换题不改余额、新题答对后仅发放一次、领取后同账户多窗口同步。
+- 天地癞子：两个不同非王点数、天癞子提前公开与地癞子保密、无人叫地主重发、双癞子替代、四张纯 / 混合 / 硬 / 软炸分级、五至十二张长炸、王炸最高、×2 / ×4 / ×6 倍率。
+- 解释搜索与小规模穷举结果对照、八张癞子组合的处理时限、明确指定有歧义的飞机主体；三种 AI 人格处理八张混合长炸与超出评分上限的直接收尾候选，三种模式各完成三局种子对局。
+- 新模式的 Socket 参数、玩家 / 观众隐私、刷新重连、战绩与全牌回放、SQLite 重新打开后的持久化；原有标准与四癞子模式继续通过回归测试。
 
-Node 24.21.0 下的 TypeScript 检查、Vitest 和 Vite 生产构建均通过。生产模式单进程服务在本机启动，提供构建后的网页及同源 API / Socket。
+Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产构建均通过。生产模式单进程服务在本机启动，提供构建后的网页及同源 API / Socket。
 
 ## 真实浏览器
 
@@ -38,8 +41,12 @@ Node 24.21.0 下的 TypeScript 检查、Vitest 和 Vite 生产构建均通过。
 | Chromium / WebKit：844 × 390 横屏 | 单排手牌完整落在可视高度内 |
 | Chromium / WebKit：触摸选牌、取消 | 通过 |
 | WebKit / Firefox：生产服务身份、联机、PVE、主题、出牌选择与离开 | 通过，无 JavaScript 运行错误 |
+| 天地癞子 PVE：发牌、叫抢、出牌、结算、复盘 | 通过；叫抢期间仅显示天癞子，复盘保留两种标记 |
+| 天地癞子 PVP：三玩家与观众完整对局 | 四端结算相同，底注、观战、换座、重连与退出继续正常 |
+| 十二张软炸：三种玩家视角、320px / 390px / 844px | 通过；全部纸牌处于视口内，HUD 从 ×15 同步到 ×90，明细显示 ×6，刷新后手牌与倍率保留 |
+| Chromium / WebKit / Firefox：第三模式、手动主题、刷新记忆 | 通过；移动端主页卡牌不遮挡底注，天 / 地标记与底注保持间距 |
 
-对应脚本：`tests/browser_nickname.py`、`tests/browser_smoke.py`、`tests/browser_pvp.py`、`tests/browser_engines.py`、`tests/browser_relief.py`。使用真实界面与同源服务。救济脚本的零余额账户通过 `tests/seed_relief.ts` 在隔离测试数据库内预置，再通过正式界面与接口作答；生产服务未增加测试接口。Tokens 重置通过玩家可用的正式流程验收。
+对应脚本：`tests/browser_nickname.py`、`tests/browser_smoke.py`、`tests/browser_pvp.py`、`tests/browser_engines.py`、`tests/browser_relief.py`、`tests/browser_heaven_bomb.py`。PVE / PVP 脚本支持 `GAME_MODE_LABEL=天地癞子`。使用真实界面与同源服务。救济脚本的零余额账户通过 `tests/seed_relief.ts` 在隔离测试数据库内预置；十二张炸弹通过 `tests/serve_heaven_fixture.ts` 独立 CLI 在隔离数据库内预置合法的 54 张牌，再通过正式界面与接口出牌。生产服务未增加测试接口。Tokens 重置通过玩家可用的正式流程验收。
 
 ## 截图
 
@@ -55,11 +62,15 @@ Node 24.21.0 下的 TypeScript 检查、Vitest 和 Vite 生产构建均通过。
 - [320px 重置最终确认](screenshots/token-reset-second.png)
 - [320px 房主选择底注](screenshots/room-stake.png)
 - [320px 救济答错与新题](screenshots/relief-retry.png)
+- [天地癞子移动主界面](screenshots/heaven-earth-home.png)
+- [天癞子公开、地癞子待定](screenshots/heaven-earth-bidding.png)
+- [320px 十二张炸弹与 ×90](screenshots/heaven-earth-bomb.png)
+- [横屏对手视角十二张炸弹](screenshots/heaven-earth-landscape.png)
 
 ## 验证边界
 
-- Docker、Docker Compose、Nginx 在本机不可用，本机没有启动这些组件。GitHub Actions 配置了 Linux Docker 构建、数据卷启动和容器内网页的四套浏览器验收，以对应提交的 CI 结果为准；Nginx 与实际 HTTPS 代理仍需部署时验收。
-- 尚未指定实际服务器、域名与证书；没有进行公网部署、DNS、HTTPS 或跨公网延迟验收。
+- Docker、Docker Compose、Nginx 在本机不可用，本机没有启动这些组件。GitHub Actions 配置了 Linux Docker 构建、数据卷启动、三种模式的浏览器验收和独立长炸夹具，以对应提交的 CI 结果为准；Nginx 与实际 HTTPS 代理仍需部署时验收。
+- 本次天地癞子改动未部署到服务器；本记录不验证当前公网版本、DNS、HTTPS 或跨公网延迟。
 - 手机覆盖来自浏览器视口及触摸模拟；WebKit 不是实体 iPhone Safari，未进行实体设备验收。
 - 首版为单实例熟人房间游戏，没有大规模并发负载测试。AI 是公开信息下的启发式与有限搜索策略，不承诺专业竞技水平。
 - 游客凭证绑定浏览器，清除浏览器数据无法找回；进行中的牌局不跨服务重启恢复。服务升级和停机备份应在没有进行中牌局时安排。

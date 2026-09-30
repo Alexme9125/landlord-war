@@ -88,7 +88,7 @@ describe("Rooms", () => {
     }
   });
 
-  it.each(["standard", "wild"] as const)(
+  it.each(["standard", "wild", "heaven-earth"] as const)(
     "preserves %s stakes through redeal, settlement and replay while allowing the next round to change",
     (mode) => {
       const { store, accounts, room, rooms, send, start, landlord } =
@@ -102,12 +102,24 @@ describe("Rooms", () => {
             action: { type: "bid", yes: false },
           });
         expect(room.game).toMatchObject({
+          mode,
           phase: "bidding",
           baseStake: 50,
           multiplier: "15",
         });
+        if (mode === "heaven-earth") {
+          expect(room.game!.heavenRank).toBeGreaterThanOrEqual(3);
+          expect(room.game!.heavenRank).toBeLessThanOrEqual(15);
+          expect(room.game!.wildRank).toBeGreaterThanOrEqual(3);
+          expect(room.game!.wildRank).toBeLessThanOrEqual(15);
+          expect(room.game!.heavenRank).not.toBe(room.game!.wildRank);
+        }
         const landlordSeat = landlord();
         const gameId = room.game!.id;
+        const ranks = {
+          heavenRank: room.game!.heavenRank,
+          wildRank: room.game!.wildRank,
+        };
         const pairAmount = 50n * BigInt(room.game!.multiplier);
         send(accounts[1], { type: "leave" });
         expect(room.result?.baseStake).toBe(50);
@@ -119,20 +131,83 @@ describe("Rooms", () => {
         expect(room.game?.baseStake).toBe(50);
         expect(room.result).toEqual(result);
         expect(store.getReplay(gameId, accounts[0].id)).toMatchObject({
-          game: { baseStake: 50 },
+          mode,
+          game: { mode, baseStake: 50, ...ranks },
         });
         expect(rooms.spectatorReplay(accounts[3].id, gameId)).toMatchObject({
-          game: { baseStake: 50 },
+          mode,
+          game: { mode, baseStake: 50, ...ranks },
+        });
+        expect(store.getHistory(accounts[0].id)[0]).toMatchObject({
+          id: gameId,
+          mode,
         });
         rooms.join(store.getAccount(accounts[1].id)!, room.code);
         start();
-        expect(room.game).toMatchObject({ baseStake: 20, multiplier: "15" });
+        expect(room.game).toMatchObject({
+          mode,
+          baseStake: 20,
+          multiplier: "15",
+        });
+        if (mode === "heaven-earth")
+          expect(room.game!.heavenRank).not.toBe(room.game!.wildRank);
         expect(room.result).toBeNull();
       } finally {
         store.close();
       }
     },
   );
+
+  it("reveals the heaven wildcard while bidding and both wildcards after landlord selection to seats, spectators, and AI", () => {
+    const { store, accounts, rooms, room, start, landlord } =
+      setup("heaven-earth");
+    try {
+      start();
+      const { heavenRank, wildRank } = room.game!;
+      expect(heavenRank).not.toBe(wildRank);
+      for (const account of accounts) {
+        const view = rooms.project(room, account.id);
+        expect(view.mode).toBe("heaven-earth");
+        expect(view.game).toMatchObject({
+          phase: "bidding",
+          heavenRank,
+          wildRank: null,
+          bottom: [],
+        });
+        expect(view.game?.hand).toEqual(
+          account.id === accounts[3].id
+            ? []
+            : room.game!.hands[accounts.findIndex((a) => a.id === account.id)],
+        );
+      }
+      expect(rooms.observation(room, room.game!.turn)).toMatchObject({
+        wildRank: heavenRank,
+        bottom: [],
+      });
+      rooms.disconnect(accounts[0].id, "socket-0");
+      rooms.connect(accounts[0].id, "reconnected-socket");
+      expect(rooms.current(accounts[0].id)).toBe(room);
+      expect(rooms.project(room, accounts[0].id).game).toMatchObject({
+        heavenRank,
+        wildRank: null,
+        bottom: [],
+      });
+
+      landlord();
+      for (const account of accounts)
+        expect(rooms.project(room, account.id).game).toMatchObject({
+          heavenRank,
+          wildRank,
+          bottom: room.game!.bottom,
+        });
+      expect(rooms.observation(room, room.game!.landlord)).toMatchObject({
+        wildRank: [heavenRank, wildRank],
+        bottom: room.game!.bottom,
+      });
+    } finally {
+      store.close();
+    }
+  });
 
   it("applies the selected stake to immediate PVE and transfers control to the next host", () => {
     const { store, accounts, room, rooms, send } = setup();
@@ -435,7 +510,7 @@ describe("Rooms", () => {
     }
   });
 
-  it.each(["standard", "wild"] as Mode[])(
+  it.each(["standard", "wild", "heaven-earth"] as Mode[])(
     "finishes a %s game through room commands",
     (mode) => {
       const { store, accounts, rooms, room, send, start } = setup(mode);

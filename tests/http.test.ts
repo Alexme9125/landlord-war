@@ -200,6 +200,43 @@ describe("HTTP and Socket.IO boundary", () => {
     }
   });
 
+  it("accepts heaven-earth rooms over Socket.IO and rejects unknown modes", async () => {
+    const { session, socket } = await fixture();
+    const owner = await session();
+    const client = socket(owner.cookie);
+    cleanup.push(async () => {
+      client.disconnect();
+    });
+    await connected(client);
+    for (const mode of ["heaven", "heaven_earth", "bad"]) {
+      const rejected = await acknowledged<{ ok: boolean; error: string }>(
+        client,
+        "room.create",
+        { mode, kind: "pve" },
+      );
+      expect(rejected).toMatchObject({ ok: false, error: "模式无效" });
+    }
+    const created = await acknowledged<{ ok: boolean; room: RoomView }>(
+      client,
+      "room.create",
+      { mode: "heaven-earth", kind: "pve", baseStake: 20 },
+    );
+    expect(created.ok).toBe(true);
+    expect(created.room).toMatchObject({
+      mode: "heaven-earth",
+      kind: "pve",
+      baseStake: 20,
+      game: {
+        phase: "bidding",
+        baseStake: 20,
+        wildRank: null,
+        bottom: [],
+      },
+    });
+    expect(created.room.game?.heavenRank).toBeGreaterThanOrEqual(3);
+    expect(created.room.game?.heavenRank).toBeLessThanOrEqual(15);
+  });
+
   it("requires authenticated same-origin confirmation and syncs a reset only to the owner's tabs", async () => {
     const { app, request, session, socket } = await fixture();
     const players = await Promise.all(

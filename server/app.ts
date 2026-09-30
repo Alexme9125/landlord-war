@@ -5,6 +5,7 @@ import { Server } from "socket.io";
 import { Store, ReliefAnswerError } from "./store.ts";
 import { Rooms } from "./rooms.ts";
 import type { Mode, Personality, RoomCommand } from "../shared/types.ts";
+import { MODES } from "../shared/types.ts";
 
 const cookie = (raw = "") =>
   raw
@@ -225,10 +226,7 @@ export function createApplication(
     socket.on(
       "room.create",
       respond((data) => {
-        if (
-          !["standard", "wild"].includes(data.mode) ||
-          !["pve", "pvp"].includes(data.kind)
-        )
+        if (!MODES.includes(data.mode) || !["pve", "pvp"].includes(data.kind))
           throw new Error("模式无效");
         const personalities: Personality[] = data.personalities ?? [
           "cautious",
