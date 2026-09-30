@@ -613,21 +613,44 @@ svg {
   color: var(--ink);
   margin-left: 5px;
 }
+.table-spec > span {
+  white-space: nowrap;
+}
 .stake-control {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 8px;
   color: var(--muted);
   font-size: 11px;
+  white-space: nowrap;
 }
-.stake-control select {
+.stake-options {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.stake-options button {
+  min-width: 36px;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 20px;
   font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: transparent;
+}
+.stake-options button:not(:disabled):not([aria-pressed="true"]):hover {
+  color: var(--ink);
+  background: var(--panel);
+}
+.stake-options button[aria-pressed="true"] {
   color: var(--ink);
   background: var(--panel-solid);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 7px 6px;
-  cursor: pointer;
+  box-shadow: 0 3px 12px var(--shadow);
 }
 .waiting-stake {
   font-size: 11px;
@@ -650,7 +673,7 @@ svg {
   line-height: 1.7;
   margin: 0 0 16px;
 }
-.table-spec button {
+.table-spec > button {
   margin-left: auto;
   display: flex;
   background: transparent;
@@ -2236,7 +2259,7 @@ svg {
   .table-spec {
     left: 19px;
     right: 19px;
-    gap: 13px;
+    gap: 10px;
   }
   .table-spec b {
     font-size: 10px;
@@ -2521,7 +2544,7 @@ svg {
     right: 19px;
     bottom: 17px;
     padding-top: 12px;
-    gap: 20px;
+    gap: 12px;
   }
   .play-options {
     padding: 24px;
