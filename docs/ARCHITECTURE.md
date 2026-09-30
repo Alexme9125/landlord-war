@@ -21,6 +21,7 @@
 | `POST /api/session` | 恢复或创建游客；返回 `{account,roomCode}`，首次设置 Cookie |
 | `GET /api/me` | `{id,name,balance,games,wins}` |
 | `PATCH /api/me` | `{name}`，在主页或房间修改 1–16 个 Unicode 字符的昵称，允许对局中修改；同步当前座位、观众列表及账户，不修改历史回放 |
+| `POST /api/me/reset-tokens` | `{confirmed:true}`，仅未加入房间的当前账户可用，将余额设为 100000 并返回 `Account`；在同一事务中记录 `reset` 账目并作废未使用的救济题目 |
 | `GET /api/history` | 最近 20 局 `{id,mode,kind,at,delta,won}` |
 | `GET /api/replays/:id` | 完整终局、初始牌、逐步动作和 AI 解释；仅参与者，或仍在已结束房间的观众 |
 | `POST /api/relief` | 零余额领取题目 `{id,question}` |
@@ -39,7 +40,7 @@
 | `room.command` | `{id,version,command}` | `{ok:true,room,account}` |
 | `room.hint` | `{}` | `{ok:true,action,explanation}` |
 | 服务端 `room` | 无 | 个性化 `RoomView` 或 `null` |
-| 服务端 `account` | 无 | 改名后的 `Account`，仅发送给该账户的所有已连接窗口 |
+| 服务端 `account` | 无 | 改名或重置 Tokens 后的 `Account`，仅发送给该账户的所有已连接窗口 |
 
 失败 ack 为 `{ok:false,error}`。`id` 为每个动作的 UUID，`version` 为最近收到的房间版本。除独立加倍选择和退出外，过期版本拒绝。重复成功动作不会再次应用。
 

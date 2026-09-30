@@ -73,6 +73,127 @@ function acknowledged<T = unknown>(
 }
 
 describe("HTTP and Socket.IO boundary", () => {
+  it("requires authenticated same-origin confirmation and syncs a reset only to the owner's tabs", async () => {
+    const { app, request, session, socket } = await fixture();
+    const players = await Promise.all(
+      Array.from({ length: 3 }, () => session()),
+    );
+    const owner = players[0];
+    app.store.settle({
+      id: "before-reset",
+      mode: "standard",
+      kind: "pvp",
+      landlord: 0,
+      winner: "farmers",
+      multiplier: "15",
+      doubles: [1, 1, 1],
+      reason: "正常结束",
+      replay: { complete: true },
+      players: players.map(({ account }, index) => ({
+        ...account,
+        name: String(index),
+      })),
+    });
+    const before = app.store.getAccount(owner.account.id)!;
+    expect(before.balance).toBe("99700");
+    const reset = (cookie: string, body: unknown, origin?: string) =>
+      request("/api/me/reset-tokens", {
+        method: "POST",
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+          ...(origin ? { Origin: origin } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+    expect((await reset("", { confirmed: true })).status).toBe(401);
+    expect(
+      (await reset(owner.cookie, { confirmed: true }, "https://evil.example"))
+        .status,
+    ).toBe(403);
+    for (const confirmed of [undefined, false, "true"])
+      expect((await reset(owner.cookie, { confirmed })).status).toBe(400);
+    expect(app.store.getAccount(owner.account.id)).toEqual(before);
+
+    const sockets = [
+      socket(owner.cookie),
+      socket(owner.cookie),
+      socket(players[1].cookie),
+    ];
+    cleanup.push(async () => {
+      sockets.forEach((s) => s.disconnect());
+    });
+    await Promise.all(sockets.map(connected));
+    const updates: (Account | null)[] = [null, null, null];
+    sockets.forEach((s, index) =>
+      s.on("account", (account) => {
+        updates[index] = account;
+      }),
+    );
+    // Caller-supplied account IDs and amounts cannot redirect or change the reset.
+    const response = await reset(owner.cookie, {
+      confirmed: true,
+      id: players[1].account.id,
+      balance: "9999999",
+    });
+    expect(response.status).toBe(200);
+    const expected = { ...before, balance: "100000" };
+    expect(await response.json()).toEqual(expected);
+    await expect
+      .poll(() =>
+        updates.slice(0, 2).every((account) => account?.balance === "100000"),
+      )
+      .toBe(true);
+    expect(updates).toEqual([expected, expected, null]);
+    expect(app.store.getAccount(players[1].account.id)?.balance).toBe("100150");
+    expect((await reset(owner.cookie, { confirmed: true })).status).toBe(200);
+    expect(app.store.getAccount(owner.account.id)).toEqual(expected);
+  });
+
+  it("rejects resets from seated players and spectators until they leave the room", async () => {
+    const { app, request, session } = await fixture();
+    const players = await Promise.all(
+      Array.from({ length: 4 }, () => session()),
+    );
+    const accounts = players.map(({ account }) =>
+      app.store.getAccount(account.id)!,
+    );
+    accounts.forEach((account, index) =>
+      app.rooms.connect(account.id, `reset-test-${index}`),
+    );
+    const room = app.rooms.create(accounts[0], "standard", "pvp");
+    accounts.slice(1).forEach((account) => app.rooms.join(account, room.code));
+    const reset = (index: number) =>
+      request("/api/me/reset-tokens", {
+        method: "POST",
+        headers: {
+          Cookie: players[index].cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ confirmed: true }),
+      });
+    expect((await reset(0)).status).toBe(409);
+    accounts
+      .slice(0, 3)
+      .forEach((account, index) =>
+        app.rooms.command(account.id, room.version, `ready-${index}`, {
+          type: "ready",
+        }),
+      );
+    const game = structuredClone(room.game);
+    const version = room.version;
+    for (let index = 0; index < players.length; index++) {
+      expect((await reset(index)).status).toBe(409);
+      expect(app.store.getAccount(accounts[index].id)).toEqual(accounts[index]);
+    }
+    expect(room.game).toEqual(game);
+    expect(room.version).toBe(version);
+    app.rooms.command(accounts[3].id, room.version, "spectator-exit", {
+      type: "leave",
+    });
+    expect((await reset(3)).status).toBe(200);
+  });
+
   it("persists a nickname and broadcasts it to all own tabs and room members", async () => {
     const { app, request, session, socket } = await fixture();
     const players = await Promise.all(
