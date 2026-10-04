@@ -22,6 +22,8 @@ import {
   LogOut,
   Moon,
   Pencil,
+  Pause,
+  Play as PlayIcon,
   Plus,
   RefreshCw,
   Settings2,
@@ -434,7 +436,14 @@ export default function App() {
   const game = room?.game,
     live = !!game && !["finished", "redeal"].includes(game.phase),
     mySeat = room?.mySeat ?? -1;
-  const myTurn = !!game && game.turn === mySeat && !room?.pausedUntil;
+  const ownTurn = !!game && mySeat >= 0 && game.turn === mySeat;
+  const myTurn = ownTurn && !room?.pausedUntil && !room?.pause && connected;
+  const pauseOwner = room?.seats.find(
+    (player) => player?.id === room.pause?.by,
+  );
+  useEffect(() => {
+    if (room?.pause || room?.pausedUntil) setChoices(null);
+  }, [room?.pause?.by, room?.pausedUntil]);
   const hand = game?.hand ?? [];
   const interpretations = useMemo(
     () =>
@@ -464,7 +473,11 @@ export default function App() {
   };
   const countdown = Math.max(
     0,
-    Math.ceil(((room?.pausedUntil ?? room?.deadline ?? now) - now) / 1000),
+    Math.ceil(
+      room?.pause
+        ? room.pause.remainingMs / 1000
+        : ((room?.pausedUntil ?? room?.deadline ?? now) - now) / 1000,
+    ),
   );
   const baseSeat = mySeat < 0 ? 0 : mySeat,
     leftSeat = (baseSeat + 2) % 3,
@@ -952,6 +965,26 @@ export default function App() {
               )}
             </div>
             <div className="room-tools">
+              {live && game!.phase === "playing" && ownTurn && (
+                <button
+                  className={`pause-button ${room.pause ? "is-paused" : ""}`}
+                  aria-label={room.pause ? "继续对局" : "暂停对局"}
+                  title={
+                    room.pausedUntil
+                      ? "等待在座玩家重新连接"
+                      : room.pause
+                        ? "继续使用暂停前的剩余时间"
+                        : "临时离席，暂停出牌倒计时"
+                  }
+                  disabled={busy || !connected || !!room.pausedUntil}
+                  onClick={() =>
+                    void command({ type: room.pause ? "resume" : "pause" })
+                  }
+                >
+                  {room.pause ? <PlayIcon size={15} /> : <Pause size={15} />}
+                  <span>{room.pause ? "继续" : "暂停"}</span>
+                </button>
+              )}
               <button
                 className="text-button"
                 onClick={() => setModal("spectators")}
@@ -1106,10 +1139,40 @@ export default function App() {
                     <p>选择完成后统一公开 · 只影响你与对手的结算</p>
                   </div>
                 )}
-                {room.pausedUntil && (
+                {room.pause && (
+                  <div
+                    className="pause-banner"
+                    role="status"
+                    aria-label="对局已暂停"
+                  >
+                    <span className="pause-heading">
+                      <Pause size={16} /> 对局已暂停
+                    </span>
+                    <p>
+                      <strong title={pauseOwner?.name}>
+                        {room.pause.by === account?.id
+                          ? "你"
+                          : (pauseOwner?.name ?? "玩家")}
+                      </strong>
+                      暂离一下
+                    </p>
+                    <span className="pause-time">
+                      倒计时保留 <b>{countdown}s</b>
+                    </span>
+                    <small aria-live={room.pausedUntil ? "off" : undefined}>
+                      {room.pausedUntil
+                        ? `等待玩家重新连接 · ${Math.max(0, Math.ceil((room.pausedUntil - now) / 1000))}s`
+                        : room.pause.by === account?.id
+                          ? "回来后，点右上角继续"
+                          : "等对方回来，我们接着打"}
+                    </small>
+                  </div>
+                )}
+                {room.pausedUntil && !room.pause && (
                   <div className="reconnect-banner">
                     <WifiOff size={18} />
-                    等待玩家重新连接 · {countdown}s
+                    等待玩家重新连接 ·{" "}
+                    {Math.max(0, Math.ceil((room.pausedUntil - now) / 1000))}s
                   </div>
                 )}
               </>
@@ -1278,10 +1341,15 @@ export default function App() {
                   !room.pausedUntil &&
                   ((game!.phase === "doubling" &&
                     game!.doubles[mySeat] === null) ||
-                    (myTurn && game!.phase !== "doubling")) && (
+                    ((myTurn || (ownTurn && !!room.pause)) &&
+                      game!.phase !== "doubling")) && (
                     <span
-                      className={`action-timer ${countdown <= 5 ? "urgent" : ""}`}
-                      aria-label={`操作剩余 ${countdown} 秒`}
+                      className={`action-timer ${room.pause ? "frozen" : countdown <= 5 ? "urgent" : ""}`}
+                      aria-label={
+                        room.pause
+                          ? `已暂停，保留 ${countdown} 秒`
+                          : `操作剩余 ${countdown} 秒`
+                      }
                     >
                       {countdown}s
                     </span>
@@ -1863,6 +1931,11 @@ function Rules() {
           <p>
             亮底牌后三人同时选择 ×1 或
             ×2，完成后公开。个人加倍只影响与地主／对应农民的结算。不设明牌。
+          </p>
+          <h3>临时暂停</h3>
+          <p>
+            轮到自己出牌时，可在牌桌右上角暂停整桌倒计时。由暂停者点击“继续”恢复，沿用剩余秒数。PVE
+            与 PVP 均可使用；刷新后仍保持暂停，断线仍按 60 秒保留规则处理。
           </p>
         </section>
         <section>

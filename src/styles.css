@@ -3779,3 +3779,126 @@ svg {
     display: none;
   }
 }
+
+/* A table-level pause lives with room tools, away from card decisions. */
+.pause-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 11px;
+  border-radius: 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+.pause-button:hover:not(:disabled),
+.pause-button.is-paused {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.pause-banner {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  top: 53%;
+  transform: translate(-50%, -50%);
+  width: min(280px, calc(100% - 32px));
+  padding: 19px 24px;
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel-solid) 92%, transparent);
+  box-shadow: 0 12px 38px -22px var(--shadow);
+  backdrop-filter: blur(16px);
+  text-align: center;
+}
+.pause-heading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+}
+.pause-banner p {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  margin: 12px 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.pause-banner strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 16em;
+  margin-right: 5px;
+  font-weight: 500;
+}
+.pause-time {
+  font-size: 11px;
+  color: var(--muted);
+}
+.pause-time b {
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.pause-banner small {
+  display: block;
+  font-size: 10px;
+  margin-top: 10px;
+  color: var(--muted);
+}
+.action-timer.frozen {
+  color: var(--muted);
+  background: var(--panel);
+}
+@media (max-width: 600px) {
+  .pause-button {
+    width: 32px;
+    min-height: 32px;
+    padding: 6px;
+  }
+  .pause-button > span {
+    display: none;
+  }
+  .pause-banner {
+    width: 222px;
+    padding: 16px;
+    top: 58%;
+  }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .pause-banner {
+    display: grid;
+    grid-template-columns: 1fr 1.25fr;
+    align-items: center;
+    gap: 6px 10px;
+    top: 77%;
+    width: 320px;
+    padding: 10px 17px;
+  }
+  .pause-heading {
+    justify-content: flex-start;
+    font-size: 12px;
+  }
+  .pause-banner p {
+    min-width: 0;
+    justify-content: flex-end;
+    margin: 0;
+    font-size: 11px;
+  }
+  .pause-time {
+    text-align: left;
+  }
+  .pause-banner small {
+    margin: 0;
+    text-align: right;
+    font-size: 9px;
+  }
+}
