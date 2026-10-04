@@ -6,6 +6,18 @@ from playwright.sync_api import sync_playwright, expect
 BASE=os.environ.get('GAME_URL','http://127.0.0.1:3181')
 OUT=Path(os.environ.get('SCREENSHOT_DIR','/tmp/landlord-screenshots'))
 OUT.mkdir(parents=True,exist_ok=True)
+
+def reach_playing_turn(page):
+    for _ in range(180):
+        if page.get_by_role('button',name='暂停对局',exact=True).count():
+            return
+        for label in ['叫地主','抢地主 ×2','不加倍']:
+            button=page.get_by_role('button',name=label,exact=True)
+            if button.count() and button.is_visible() and button.is_enabled():
+                button.click()
+        page.wait_for_timeout(150)
+    raise AssertionError('did not reach a human playing turn')
+
 with sync_playwright() as p:
     for name in ['chromium','webkit','firefox']:
         browser=getattr(p,name).launch(headless=True)
@@ -61,6 +73,16 @@ with sync_playwright() as p:
         expect(card).to_have_attribute('aria-pressed','true')
         page.get_by_role('button',name='取消选牌').click()
         expect(card).to_have_attribute('aria-pressed','false')
+        reach_playing_turn(page)
+        pause=page.get_by_role('button',name='暂停对局',exact=True)
+        if mobile: pause.tap()
+        else: pause.click()
+        expect(page.get_by_role('status',name='对局已暂停',exact=True)).to_be_visible()
+        frozen=page.locator('.pause-time').inner_text()
+        page.wait_for_timeout(1200)
+        expect(page.locator('.pause-time')).to_have_text(frozen)
+        expect(page.get_by_role('button',name='提示',exact=True)).to_be_disabled()
+        assert page.locator('.action-zone .pause-button').count()==0
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         page.screenshot(path=str(OUT/f'{name}-production-game.png'),full_page=True)
         if mobile:
@@ -71,10 +93,15 @@ with sync_playwright() as p:
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             assert page.locator('.hand').bounding_box()['y']+page.locator('.hand').bounding_box()['height']<=390
             page.screenshot(path=str(OUT/f'{name}-production-landscape.png'),full_page=True)
+        resume=page.get_by_role('button',name='继续对局',exact=True)
+        if mobile: resume.tap()
+        else: resume.click()
+        expect(page.get_by_role('status',name='对局已暂停',exact=True)).to_have_count(0)
+        expect(page.get_by_role('button',name='提示',exact=True)).to_be_enabled()
         # Leave control is intentionally icon-only at narrow widths.
         page.locator('.room-toolbar > button').click()
         page.get_by_role('button',name='离开',exact=True).click()
         expect(page.get_by_role('button',name='开始练习',exact=True)).to_be_visible()
         assert not errors,errors
-        print(f'PASS {name}: production identity/socket/PVE, theme, selection/cancel, viewport, leave; no JS errors',flush=True)
+        print(f'PASS {name}: production identity/socket/PVE, theme, selection/cancel, turn pause/resume, viewport, leave; no JS errors',flush=True)
         browser.close()

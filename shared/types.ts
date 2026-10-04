@@ -186,9 +186,12 @@ export interface RoomView {
   };
   deadline: number | null;
   pausedUntil: number | null;
+  pause: { by: string; remainingMs: number } | null;
   result: ResultView | null;
 }
 export type RoomCommand =
+  | { type: "pause" }
+  | { type: "resume" }
   | { type: "ready" }
   | { type: "stake"; baseStake: BaseStake }
   | { type: "sit"; seat: number }

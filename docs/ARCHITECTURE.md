@@ -48,7 +48,9 @@
 
 `bots` 必须包含两个配置，名字遵循玩家昵称的 1–16 Unicode 字符规则。`difficulty` 是 `dazed`（恍惚）、`gentle`（温和）、`fierce`（凌厉）；`personality` 是 `cautious`、`balanced`、`bold`。UI 默认两位温和，配置保存在 `darwin-bots` 浏览器偏好中。旧客户端的 `personalities:[人格,人格]` 仍兼容，缺省使用原名字、原流派和恍惚策略；旧提示及超时建议调用也保留原策略。配置非法时在创建房间前拒绝，不能部分创建。座位以 `bot` 表示流派，新增可选 `difficulty`，下一局及赛后回放保留配置，旧回放无该字段时兼容。
 
-`command` 包括 `ready`、`stand`、`sit {seat}`、`leave`、`stake {baseStake}`、`game {action}`。`stake` 仅房主可在非游戏期间设置为 10 / 20 / 50，改变数值后清除真人准备状态。`RoomView.baseStake` 是下一次开局的底注，`game.baseStake` 与 `result.baseStake` 是原局固定值。游戏动作包括 `bid {yes}`、`double {yes}`、`pass`、`play {cardIds,as?,kind?,main?}`。`as` 与物理牌 ID 一一对应；`kind/main` 指定有歧义时的牌型与主体，服务器只接受这些牌确实能组成的解释。客户端不能发送自己的牌面对象代替服务器牌。
+`command` 包括 `ready`、`stand`、`sit {seat}`、`leave`、`stake {baseStake}`、`pause`、`resume`、`game {action}`。`stake` 仅房主可在非游戏期间设置为 10 / 20 / 50，改变数值后清除真人准备状态。`RoomView.baseStake` 是下一次开局的底注，`game.baseStake` 与 `result.baseStake` 是原局固定值。游戏动作包括 `bid {yes}`、`double {yes}`、`pass`、`play {cardIds,as?,kind?,main?}`。`as` 与物理牌 ID 一一对应；`kind/main` 指定有歧义时的牌型与主体，服务器只接受这些牌确实能组成的解释。客户端不能发送自己的牌面对象代替服务器牌。
+
+`pause` 仅限出牌阶段的当前真人，且截止时间尚未到达；服务端保存 `deadline - Date.now()` 的剩余毫秒并清空截止时间。`RoomView.pause` 为 `null` 或 `{by: accountId, remainingMs}`，对玩家与观众一致；`pausedUntil` 继续表示独立的断线保留截止时间。手动暂停期间拒绝游戏动作与提示，跳过自动出牌和 AI 调度；只有暂停者可 `resume`，并且所有在座玩家必须在线。恢复将截止时间设为当前时间加剩余毫秒。版本验证与命令去重同样适用，重新连接不解除手动暂停；断线超时与主动退出仍按原规则结算，并清除暂停状态。
 
 `RoomView` 仅包含自己的手牌、公开底牌、公开事件、各座位剩余张数、倍率、计时和结果。`heavenRank` 为天地模式的天癞子，发牌后公开；`wildRank` 为四癞子点数或天地模式的地癞子，与底牌一起在确定地主后公开。其他模式的 `heavenRank` 为 `null`，旧回放没有该字段时按无天癞子处理。AI 使用同样的公开范围。个人加倍结果在三人决定前隐藏；AI 解释仅赛后进入复盘。完整暗牌状态从不广播。
 

@@ -2,7 +2,11 @@ import { randomInt, randomUUID } from "node:crypto";
 import { deck, gameWildRanks } from "../shared/cards.ts";
 import { createGame, applyAction, forfeit } from "../shared/engine.ts";
 import { playName } from "../shared/rules.ts";
-import { DEFAULT_BOTS, parseBaseStake, type BaseStake } from "../shared/types.ts";
+import {
+  DEFAULT_BOTS,
+  parseBaseStake,
+  type BaseStake,
+} from "../shared/types.ts";
 import type {
   Account,
   BotConfig,
@@ -40,6 +44,7 @@ export interface Room {
   result: ResultView | null;
   deadline: number | null;
   remaining: number;
+  pausedBy: string | null;
   disconnected: Map<string, number>;
   botAt: number;
   updated: number;
@@ -48,8 +53,9 @@ export interface Room {
 }
 const active = (r: Room) =>
   !!r.game && !["finished", "redeal"].includes(r.game.phase);
-const paused = (r: Room) =>
+const waitingForReconnect = (r: Room) =>
   r.seats.some((s) => s && !s.bot && r.disconnected.has(s.id));
+const paused = (r: Room) => !!r.pausedBy || waitingForReconnect(r);
 function shuffled() {
   const cards = deck();
   for (let i = cards.length - 1; i > 0; i--) {
@@ -196,6 +202,7 @@ export class Rooms {
       result: null,
       deadline: null,
       remaining: 0,
+      pausedBy: null,
       disconnected: new Map(),
       botAt: 0,
       updated: Date.now(),
@@ -264,6 +271,7 @@ export class Rooms {
     });
     room.result = null;
     room.completedReplay = null;
+    room.pausedBy = null;
     room.game = newGame(room, randomUUID(), randomInt(3));
     room.disconnected.clear();
     this.resetTimer(room);
@@ -295,9 +303,29 @@ export class Rooms {
       this.leave(room, id);
       return;
     }
-    if (command.type === "game") {
+    if (command.type === "pause") {
+      if (!room.game || room.game.phase !== "playing")
+        throw new Error("出牌阶段才能暂停");
+      if (seat < 0 || room.seats[seat]?.bot || seat !== room.game.turn)
+        throw new Error("轮到你出牌时才能暂停");
+      if (paused(room)) throw new Error("牌局已暂停");
+      const remaining = (room.deadline ?? 0) - Date.now();
+      if (remaining <= 0) throw new Error("本回合已超时，无法暂停");
+      room.remaining = remaining;
+      room.pausedBy = id;
+      room.deadline = null;
+      this.changed(room);
+    } else if (command.type === "resume") {
+      if (!room.pausedBy) throw new Error("当前没有手动暂停");
+      if (room.pausedBy !== id) throw new Error("请等待暂停的玩家回来继续");
+      if (waitingForReconnect(room)) throw new Error("请等待在座玩家重新连接");
+      room.pausedBy = null;
+      room.deadline = Date.now() + room.remaining;
+      this.changed(room);
+    } else if (command.type === "game") {
       if (seat < 0) throw new Error("观战时不能操作手牌");
-      if (paused(room)) throw new Error("等待断线玩家重连");
+      if (room.pausedBy) throw new Error("牌局已暂停，请先继续对局");
+      if (waitingForReconnect(room)) throw new Error("等待断线玩家重连");
       this.act(room, seat, command.action);
     } else {
       if (active(room)) throw new Error("对局中不能调整房间");
@@ -418,6 +446,7 @@ export class Rooms {
       });
     }
     room.deadline = null;
+    room.pausedBy = null;
     room.seats.forEach((s) => {
       if (s) s.ready = !!s.bot;
     });
@@ -468,6 +497,7 @@ export class Rooms {
     const seat = room.seats.findIndex((s) => s?.id === id);
     if (seat < 0 || seat !== room.game.turn)
       throw new Error("轮到你时可以使用提示");
+    if (paused(room)) throw new Error("牌局已暂停，继续后可使用提示");
     return chooseAction(this.observation(room, seat), "balanced");
   }
   tick(now = Date.now()) {
@@ -481,7 +511,8 @@ export class Rooms {
           this.leave(room, expired[0]);
           continue;
         }
-        if (seatedDisconnected.length || !active(room)) continue;
+        if (room.pausedBy || seatedDisconnected.length || !active(room))
+          continue;
         const g = room.game!;
         if (g.phase === "doubling") {
           if (now >= room.botAt)
@@ -596,6 +627,9 @@ export class Rooms {
         : null,
       deadline: room.deadline,
       pausedUntil: paused.length ? Math.min(...paused) : null,
+      pause: room.pausedBy
+        ? { by: room.pausedBy, remainingMs: room.remaining }
+        : null,
       result: room.result,
     };
   }

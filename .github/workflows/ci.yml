@@ -75,6 +75,10 @@ jobs:
         run: python tests/browser_smoke.py
       - name: Complete PVP with three players and a spectator
         run: python tests/browser_pvp.py
+      - name: Turn pause synchronization, reconnect and responsive toolbar
+        env:
+          SCREENSHOT_DIR: /tmp/landlord-screenshots/pause
+        run: python tests/browser_pause.py
       - name: Complete heaven-earth PVE and PVP
         env:
           GAME_MODE_LABEL: 天地癞子
