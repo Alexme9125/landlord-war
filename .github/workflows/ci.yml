@@ -69,6 +69,8 @@ jobs:
           exit 1
       - name: Nickname editing, synchronization and persistence
         run: python tests/browser_nickname.py
+      - name: AI configuration, responsive capsules and new-difficulty match
+        run: python tests/browser_ai.py
       - name: Complete PVE, Token reset and responsive layout
         run: python tests/browser_smoke.py
       - name: Complete PVP with three players and a spectator

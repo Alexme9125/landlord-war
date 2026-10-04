@@ -200,6 +200,62 @@ describe("HTTP and Socket.IO boundary", () => {
     }
   });
 
+  it("accepts named bot configurations and rejects malformed Socket.IO payloads atomically", async () => {
+    const { app, session, socket } = await fixture();
+    const owner = await session();
+    const client = socket(owner.cookie);
+    cleanup.push(async () => { client.disconnect(); });
+    await connected(client);
+    const create = (payload: unknown) => acknowledged<{
+      ok: boolean; error?: string; room?: RoomView;
+    }>(client, "room.create", { mode: "standard", kind: "pve", ...payload as object });
+    const configured = await create({
+      bots: [
+        { name: "  青松  ", difficulty: "gentle", personality: "balanced" },
+        { name: "逐风", difficulty: "fierce", personality: "bold" },
+      ],
+      personalities: ["invalid"],
+    });
+    expect(configured.ok).toBe(true);
+    expect(configured.room?.seats.slice(1)).toMatchObject([
+      { name: "青松", bot: "balanced", difficulty: "gentle" },
+      { name: "逐风", bot: "bold", difficulty: "fierce" },
+    ]);
+    await acknowledged(client, "room.command", {
+      id: "leave-bots", version: configured.room!.version,
+      command: { type: "leave" },
+    });
+    for (const bots of [
+      null,
+      [{}],
+      ["cautious", "bold"],
+      [{ name: "甲", difficulty: "gentle", personality: "bold" }, null],
+      [{ name: "甲", difficulty: "unknown", personality: "bold" },
+        { name: "乙", difficulty: "gentle", personality: "bold" }],
+      [{ name: "甲", difficulty: "gentle", personality: "unknown" },
+        { name: "乙", difficulty: "gentle", personality: "bold" }],
+      [{ name: "\u0000", difficulty: "gentle", personality: "bold" },
+        { name: "乙", difficulty: "gentle", personality: "bold" }],
+    ]) {
+      const rejected = await create({ bots });
+      expect(rejected.ok).toBe(false);
+      expect(rejected.error).toBeTruthy();
+      expect(app.rooms.current(owner.account.id)).toBeUndefined();
+      expect(app.rooms.rooms.size).toBe(0);
+    }
+    const malformedLegacy = await create({ personalities: [
+      { name: "甲", difficulty: "gentle", personality: "bold" },
+      { name: "乙", difficulty: "gentle", personality: "bold" },
+    ] });
+    expect(malformedLegacy).toMatchObject({ ok: false, error: "人格无效" });
+    expect(app.rooms.rooms.size).toBe(0);
+    const legacy = await create({ personalities: ["cautious", "bold"] });
+    expect(legacy.room?.seats.slice(1)).toMatchObject([
+      { name: "听澜", bot: "cautious", difficulty: "dazed" },
+      { name: "见山", bot: "bold", difficulty: "dazed" },
+    ]);
+  });
+
   it("accepts heaven-earth rooms over Socket.IO and rejects unknown modes", async () => {
     const { session, socket } = await fixture();
     const owner = await session();

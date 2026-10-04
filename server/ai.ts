@@ -1,10 +1,12 @@
 import type {
   Card,
+  Difficulty,
   GameAction,
   Personality,
   Play,
   Wildcards,
 } from "../shared/types.ts";
+import { chooseStrategicAction } from "./ai-strategy.ts";
 import { deck } from "../shared/cards.ts";
 import { beats, bombLevel, legalMoves, playName } from "../shared/rules.ts";
 
@@ -307,7 +309,7 @@ function finishInTwo(
   return false;
 }
 
-export function chooseAction(
+function chooseLegacyAction(
   obs: AiObservation,
   personality: Personality,
 ): { action: GameAction; explanation: string } {
@@ -421,4 +423,15 @@ export function chooseAction(
     },
     explanation,
   };
+}
+
+/** The original policy is retained verbatim as 恍惚, including legacy callers. */
+export function chooseAction(
+  obs: AiObservation,
+  personality: Personality,
+  difficulty: Difficulty = "dazed",
+) {
+  return difficulty === "dazed"
+    ? chooseLegacyAction(obs, personality)
+    : chooseStrategicAction(obs, personality, difficulty);
 }

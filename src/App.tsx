@@ -37,6 +37,8 @@ import {
 import type {
   Account,
   BaseStake,
+  BotConfig,
+  Difficulty,
   Card,
   GameState,
   Mode,
@@ -48,6 +50,8 @@ import type {
 } from "../shared/types.ts";
 import {
   BASE_STAKES,
+  DEFAULT_BOTS,
+  DIFFICULTIES,
   MODES,
   MODE_NAMES,
   PERSONALITIES,
@@ -91,6 +95,33 @@ const save = (key: string, value: string) => {
   } catch {
     /* Storage may be unavailable. */
   }
+};
+const loadBots = (): BotConfig[] => {
+  try {
+    const value: unknown = JSON.parse(saved("darwin-bots", "null"));
+    if (
+      Array.isArray(value) &&
+      value.length === 2 &&
+      value.every(
+        (bot) =>
+          bot &&
+          typeof bot.name === "string" &&
+          bot.name.trim().length > 0 &&
+          Array.from(bot.name.trim()).length <= 16 &&
+          !/\p{Cc}/u.test(bot.name) &&
+          Object.hasOwn(DIFFICULTIES, bot.difficulty) &&
+          Object.hasOwn(PERSONALITIES, bot.personality),
+      )
+    )
+      return value.map((bot) => ({
+        name: bot.name.trim(),
+        difficulty: bot.difficulty,
+        personality: bot.personality,
+      }));
+  } catch {
+    /* Ignore malformed or unavailable local preferences. */
+  }
+  return DEFAULT_BOTS.map((bot) => ({ ...bot }));
 };
 class ApiError extends Error {
   constructor(
@@ -136,7 +167,7 @@ export default function App() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
-  const [personas, setPersonas] = useState<Personality[]>(["cautious", "bold"]),
+  const [bots, setBots] = useState<BotConfig[]>(loadBots),
     [code, setCode] = useState("");
   const [modal, setModal] = useState<
     | "rules"
@@ -340,12 +371,39 @@ export default function App() {
     setTheme(next);
     save("clear-theme", next);
   }
+  function changeBot(index: number, patch: Partial<BotConfig>) {
+    setBots((current) => {
+      const next = current.map((bot, i) =>
+        i === index ? { ...bot, ...patch } : bot,
+      );
+      save(
+        "darwin-bots",
+        JSON.stringify(
+          next.map((bot, i) => ({
+            ...bot,
+            name: bot.name.trim() || DEFAULT_BOTS[i].name,
+          })),
+        ),
+      );
+      return next;
+    });
+  }
+  function finishBotName(index: number) {
+    const name = bots[index].name.trim() || DEFAULT_BOTS[index].name;
+    changeBot(index, { name });
+  }
   const create = (kind: "pve" | "pvp") =>
     perform(async () => {
       const result = await send("room.create", {
         mode,
         kind,
-        personalities: personas,
+        bots:
+          kind === "pve"
+            ? bots.map((bot, i) => ({
+                ...bot,
+                name: bot.name.trim() || DEFAULT_BOTS[i].name,
+              }))
+            : undefined,
         baseStake,
       });
       acceptRoom(result.room);
@@ -433,15 +491,30 @@ export default function App() {
                 {index === mySeat && <span className="you-label">你</span>}
               </div>
               <span className="seat-caption">
-                {!p.connected
-                  ? "等待重连"
-                  : live
-                    ? `${landlord ? "地主" : game!.landlord < 0 ? "等待叫抢" : "农民"}${p.bot ? " · " + PERSONALITIES[p.bot].name : ""}`
-                    : p.ready
-                      ? "已准备"
-                      : p.bot
-                        ? PERSONALITIES[p.bot].name
-                        : "等待准备"}
+                {!p.connected ? (
+                  "等待重连"
+                ) : (
+                  <>
+                    <span>
+                      {live
+                        ? landlord
+                          ? "地主"
+                          : game!.landlord < 0
+                            ? "等待叫抢"
+                            : "农民"
+                        : p.ready
+                          ? "已准备"
+                          : "等待准备"}
+                    </span>
+                    {p.bot && (
+                      <span className="seat-ai-style">
+                        <span className="seat-caption-dot"> · </span>
+                        {DIFFICULTIES[p.difficulty ?? "dazed"].name} /{" "}
+                        {PERSONALITIES[p.bot].name}
+                      </span>
+                    )}
+                  </>
+                )}
               </span>
             </div>
             {live && (
@@ -683,37 +756,105 @@ export default function App() {
                   </span>
                   <div>
                     <h2>人机练习</h2>
-                    <p>两位对手，两种出牌性格</p>
+                    <p>选好对手，练习你的出牌节奏</p>
                   </div>
                 </div>
-                <div className="personality-fields">
-                  {[0, 1].map((i) => (
-                    <label className="personality-field" key={i}>
-                      <span className={`small-avatar persona-${i}`}>
-                        {i === 0 ? "澜" : "山"}
-                      </span>
-                      <span className="personality-name">
-                        {i === 0 ? "听澜" : "见山"}
-                        <small>{PERSONALITIES[personas[i]].description}</small>
-                      </span>
-                      <select
-                        aria-label={`对手${i + 1}人格`}
-                        value={personas[i]}
-                        onChange={(e) =>
-                          setPersonas((p) =>
-                            p.map((v, j) =>
-                              j === i ? (e.target.value as Personality) : v,
-                            ),
-                          )
-                        }
-                      >
-                        {Object.entries(PERSONALITIES).map(([key, v]) => (
-                          <option value={key} key={key}>
-                            {v.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                <div className="ai-opponents">
+                  {bots.map((bot, i) => (
+                    <section
+                      className="ai-opponent"
+                      key={i}
+                      aria-label={`对手${i + 1}设置`}
+                    >
+                      <div className="ai-opponent-header">
+                        <span
+                          className={`small-avatar persona-${i}`}
+                          aria-hidden="true"
+                        >
+                          {Array.from(bot.name.trim())[0] ||
+                            (i === 0 ? "澜" : "山")}
+                        </span>
+                        <label className="ai-name-field">
+                          <span className="sr-only">对手{i + 1}名字</span>
+                          <input
+                            value={bot.name}
+                            placeholder={DEFAULT_BOTS[i].name}
+                            onChange={(e) =>
+                              changeBot(i, {
+                                name: Array.from(
+                                  e.target.value.replace(/\p{Cc}/gu, ""),
+                                )
+                                  .slice(0, 16)
+                                  .join(""),
+                              })
+                            }
+                            onBlur={() => finishBotName(i)}
+                            onKeyDown={(e) => {
+                              if (
+                                e.key === "Enter" &&
+                                !e.nativeEvent.isComposing
+                              )
+                                e.currentTarget.blur();
+                            }}
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                          <Pencil size={12} aria-hidden="true" />
+                        </label>
+                        <span className="ai-opponent-label">对手 {i + 1}</span>
+                      </div>
+                      <div className="ai-choice-row">
+                        <span>难度</span>
+                        <div
+                          className="ai-capsules"
+                          role="group"
+                          aria-label={`对手${i + 1}难度`}
+                        >
+                          {Object.entries(DIFFICULTIES).map(([key, value]) => (
+                            <button
+                              key={key}
+                              type="button"
+                              aria-pressed={bot.difficulty === key}
+                              title={value.description}
+                              onClick={() =>
+                                changeBot(i, { difficulty: key as Difficulty })
+                              }
+                            >
+                              {value.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="ai-choice-row">
+                        <span>流派</span>
+                        <div
+                          className="ai-capsules"
+                          role="group"
+                          aria-label={`对手${i + 1}流派`}
+                        >
+                          {Object.entries(PERSONALITIES).map(([key, value]) => (
+                            <button
+                              key={key}
+                              type="button"
+                              aria-pressed={bot.personality === key}
+                              title={value.description}
+                              onClick={() =>
+                                changeBot(i, {
+                                  personality: key as Personality,
+                                })
+                              }
+                            >
+                              {value.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="ai-style-note">
+                        {DIFFICULTIES[bot.difficulty].description}
+                        <span> · </span>
+                        {PERSONALITIES[bot.personality].description}
+                      </p>
+                    </section>
                   ))}
                 </div>
                 <button
@@ -724,7 +865,7 @@ export default function App() {
                   开始练习 <ArrowRight size={19} />
                 </button>
                 <p className="subtle-caption">
-                  同等棋力，不同性格 · 支持赛后复盘
+                  三档难度 × 三种流派 · 支持赛后复盘
                 </p>
               </div>
               <div className="friends-section">

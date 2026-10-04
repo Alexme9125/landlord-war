@@ -33,7 +33,7 @@ ORIGIN=http://127.0.0.1:3001 COOKIE_SECURE=false npm start
 - 主题仅手动切换并记住选择；首次默认浅色，切换任意玩法或加入房间均保留当前主题。
 - 标准、四癞子与天地癞子共用规则引擎。服务器校验牌权、物理手牌、牌型、癞子解释和倍率，客户端不能指定胜负或余额。
 - 天地癞子：叫地主前公开天癞子，定地主后公开地癞子；支持八张癞子和最多十二张长炸，四张纯癞子炸与混合癞子炸分别分级。手牌、底牌、出牌、倍率账目和复盘均显示相应标记。
-- 两名 AI 可分别选谨慎、平衡、激进；使用相同计算预算，只改变策略权重。决策基于自己的手牌、公开出牌、底牌和剩余张数，结合未知牌采样与有限搜索。
+- 两名 AI 可分别改名、选择恍惚 / 温和 / 凌厉难度与谨慎 / 平衡 / 激进流派；胶囊按钮即时选择，偏好保存在当前浏览器，默认温和。恍惚保留原策略，温和增加整手拆牌规划、控牌与配合，凌厉进一步推演后续应对及残局。所有难度仅使用自己的手牌和公开信息。见 [AI 策略与对照验证](docs/AI.md)。
 - 六位房间码、三人全部准备自动开局；满座加入为观众，非游戏期间可站起 / 坐下，房主离开自动移交。首版不做大厅匹配、账户注册或跨设备找回。
 - 主界面与房间底部均可直接编辑昵称，支持对局中修改；新昵称实时同步给同房玩家、观众及同账户的其他窗口。改名保留账户、余额和座位，已结束对局的回放保留结算时的名字。
 - 对局中离开判所属阵营负；断线暂停 60 秒，可重连恢复。观众离开不影响对局。服务器重启的未完成对局作废，已经完成的结算持久保存。
@@ -51,13 +51,14 @@ ORIGIN=http://127.0.0.1:3001 COOKIE_SECURE=false npm start
 - [验收记录与限制](docs/ACCEPTANCE.md)
 - [接口与代码结构](docs/ARCHITECTURE.md)
 
-每个 PR 和 `main` 的推送都会触发 GitHub Actions：Node.js 24 / 26 测试及构建，然后构建 Docker 生产镜像，在容器服务上验证昵称同步、完整四癞子与天地癞子 PVE、标准与天地癞子四会话 PVP、十二张长炸以及 Chromium / WebKit / Firefox 交互。浏览器截图及容器日志随运行记录保存 7 天。
+每个 PR 和 `main` 的推送都会触发 GitHub Actions：Node.js 24 / 26 测试及构建，然后构建 Docker 生产镜像，在容器服务上验证 AI 改名与难度 / 流派设置、完整新难度对局、昵称同步、完整四癞子与天地癞子 PVE、标准与天地癞子四会话 PVP、十二张长炸以及 Chromium / WebKit / Firefox 交互。浏览器截图及容器日志随运行记录保存 7 天。
 
 Python Playwright 浏览器脚本为可选验收工具，不是生产依赖：
 
 ```sh
 python3 -m pip install -r tests/requirements.txt
 python3 -m playwright install chromium firefox webkit
+GAME_URL=http://127.0.0.1:5173 python3 tests/browser_ai.py
 GAME_URL=http://127.0.0.1:5173 python3 tests/browser_nickname.py
 GAME_URL=http://127.0.0.1:5173 python3 tests/browser_smoke.py
 GAME_URL=http://127.0.0.1:5173 python3 tests/browser_pvp.py

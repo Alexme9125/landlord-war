@@ -19,6 +19,24 @@ export interface ReliefChallenge {
   question: string;
 }
 export type Personality = "cautious" | "balanced" | "bold";
+export type Difficulty = "dazed" | "gentle" | "fierce";
+export interface BotConfig {
+  name: string;
+  difficulty: Difficulty;
+  personality: Personality;
+}
+export const DIFFICULTIES: Record<
+  Difficulty,
+  { name: string; description: string }
+> = {
+  dazed: { name: "恍惚", description: "随性出牌，轻松热身" },
+  gentle: { name: "温和", description: "规划牌型，攻守兼顾" },
+  fierce: { name: "凌厉", description: "推演残局，主动压制" },
+};
+export const DEFAULT_BOTS: readonly BotConfig[] = [
+  { name: "听澜", difficulty: "gentle", personality: "cautious" },
+  { name: "见山", difficulty: "gentle", personality: "bold" },
+];
 export type Suit = "S" | "H" | "C" | "D" | "J";
 export interface Card {
   id: string;
@@ -119,6 +137,7 @@ export interface PlayerView {
   ready: boolean;
   connected: boolean;
   bot?: Personality;
+  difficulty?: Difficulty;
   count: number;
   doubled: number | null;
 }

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { Server } from "socket.io";
 import { Store, ReliefAnswerError } from "./store.ts";
 import { Rooms } from "./rooms.ts";
-import type { Mode, Personality, RoomCommand } from "../shared/types.ts";
+import type { Mode, RoomCommand } from "../shared/types.ts";
 import { MODES } from "../shared/types.ts";
 
 const cookie = (raw = "") =>
@@ -228,23 +228,32 @@ export function createApplication(
       respond((data) => {
         if (!MODES.includes(data.mode) || !["pve", "pvp"].includes(data.kind))
           throw new Error("模式无效");
-        const personalities: Personality[] = data.personalities ?? [
-          "cautious",
-          "bold",
-        ];
         if (
-          !Array.isArray(personalities) ||
-          personalities.length !== 2 ||
-          personalities.some(
-            (p) => !["cautious", "balanced", "bold"].includes(p),
-          )
+          data.bots !== undefined &&
+          Array.isArray(data.bots) &&
+          data.bots.every((bot: unknown) => typeof bot === "string")
+        )
+          throw new Error("机器人配置无效");
+        if (
+          data.bots === undefined &&
+          data.personalities !== undefined &&
+          (!Array.isArray(data.personalities) ||
+            data.personalities.length !== 2 ||
+            data.personalities.some(
+              (personality: unknown) =>
+                !["cautious", "balanced", "bold"].includes(
+                  personality as string,
+                ),
+            ))
         )
           throw new Error("人格无效");
         const room = rooms.create(
           store.getAccount(id)!,
           data.mode as Mode,
           data.kind,
-          personalities,
+          data.bots !== undefined
+            ? data.bots
+            : (data.personalities ?? ["cautious", "bold"]),
           data.baseStake,
         );
         return { room: rooms.project(room, id) };

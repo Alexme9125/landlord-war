@@ -7,7 +7,7 @@
 | `shared` | 牌与类型、牌型解释、候选生成、无网络依赖的回合状态机 |
 | `server/rooms.ts` | 座位、授权、版本、计时、断线、个性化状态投影与结算触发 |
 | `server/store.ts` | 哈希游客凭证、账户、救济、事务钱包、结算幂等与回放 |
-| `server/ai.ts` | 仅接受自己的手牌和公开信息；固定采样 / 搜索预算与人格权重 |
+| `server/ai.ts`、`ai-planner.ts`、`ai-strategy.ts` | 公开信息决策；保留恍惚，新增分组规划、可能牌面采样与阵营搜索 |
 | `server/app.ts` | HTTP、Cookie、来源验证、流量限制、Socket 事件和静态文件 |
 | `src` | 双主题布局、牌桌交互、手牌手势、倍率、结算和复盘 |
 
@@ -35,7 +35,7 @@
 
 | 事件 | 客户端参数 | ack |
 | --- | --- | --- |
-| `room.create` | `{mode,kind,personalities:[人格,人格],baseStake?:10\|20\|50}`，缺省 10 | `{ok:true,room}` |
+| `room.create` | `{mode,kind,bots?:[{name,difficulty,personality},{name,difficulty,personality}],baseStake?:10\|20\|50}`，缺省 10 | `{ok:true,room}` |
 | `room.join` | `{code}` | `{ok:true,room}` |
 | `room.command` | `{id,version,command}` | `{ok:true,room,account}` |
 | `room.hint` | `{}` | `{ok:true,action,explanation}` |
@@ -45,6 +45,8 @@
 失败 ack 为 `{ok:false,error}`。`id` 为每个动作的 UUID，`version` 为最近收到的房间版本。除独立加倍选择和退出外，过期版本拒绝。重复成功动作不会再次应用。
 
 `mode` 可选 `standard`、`wild`、`heaven-earth`。三个模式共用房间、结算与回放格式。
+
+`bots` 必须包含两个配置，名字遵循玩家昵称的 1–16 Unicode 字符规则。`difficulty` 是 `dazed`（恍惚）、`gentle`（温和）、`fierce`（凌厉）；`personality` 是 `cautious`、`balanced`、`bold`。UI 默认两位温和，配置保存在 `darwin-bots` 浏览器偏好中。旧客户端的 `personalities:[人格,人格]` 仍兼容，缺省使用原名字、原流派和恍惚策略；旧提示及超时建议调用也保留原策略。配置非法时在创建房间前拒绝，不能部分创建。座位以 `bot` 表示流派，新增可选 `difficulty`，下一局及赛后回放保留配置，旧回放无该字段时兼容。
 
 `command` 包括 `ready`、`stand`、`sit {seat}`、`leave`、`stake {baseStake}`、`game {action}`。`stake` 仅房主可在非游戏期间设置为 10 / 20 / 50，改变数值后清除真人准备状态。`RoomView.baseStake` 是下一次开局的底注，`game.baseStake` 与 `result.baseStake` 是原局固定值。游戏动作包括 `bid {yes}`、`double {yes}`、`pass`、`play {cardIds,as?,kind?,main?}`。`as` 与物理牌 ID 一一对应；`kind/main` 指定有歧义时的牌型与主体，服务器只接受这些牌确实能组成的解释。客户端不能发送自己的牌面对象代替服务器牌。
 

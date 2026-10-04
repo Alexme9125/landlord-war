@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Rooms } from "../server/rooms.ts";
 import { Store } from "../server/store.ts";
 import { chooseAction } from "../server/ai.ts";
-import type { Account, Mode, RoomCommand } from "../shared/types.ts";
+import * as ai from "../server/ai.ts";
+import type { Account, BotConfig, Mode, RoomCommand } from "../shared/types.ts";
 
 function setup(mode: Mode = "standard") {
   const store = new Store(":memory:");
@@ -48,6 +49,97 @@ function setup(mode: Mode = "standard") {
 }
 
 describe("Rooms", () => {
+  it("normalizes legacy bots and preserves configured names, personalities and difficulties", () => {
+    const store = new Store(":memory:");
+    const account = store.createAccount("房主").account;
+    const rooms = new Rooms(store, () => {}, {
+      bid: 15_000, play: 30_000, grace: 5_000, bot: 0,
+    });
+    rooms.connect(account.id, "owner");
+    try {
+      const legacy = rooms.create(account, "standard", "pve", ["balanced", "bold"]);
+      expect(rooms.project(legacy, account.id).seats.slice(1)).toMatchObject([
+        { name: "听澜", bot: "balanced", difficulty: "dazed" },
+        { name: "见山", bot: "bold", difficulty: "dazed" },
+      ]);
+      rooms.leave(legacy, account.id);
+      const bots: BotConfig[] = [
+        { name: "  小云  ", difficulty: "gentle", personality: "cautious" },
+        { name: "破浪", difficulty: "fierce", personality: "balanced" },
+      ];
+      const room = rooms.create(account, "standard", "pve", bots);
+      expect(rooms.project(room, account.id).seats.slice(1)).toMatchObject([
+        { name: "小云", bot: "cautious", difficulty: "gentle" },
+        { name: "破浪", bot: "balanced", difficulty: "fierce" },
+      ]);
+      expect(bots[0].name).toBe("  小云  ");
+      const spy = vi.spyOn(ai, "chooseAction");
+      try {
+        if (room.game!.turn === 0)
+          rooms.command(account.id, room.version, "human-pass", {
+            type: "game", action: { type: "bid", yes: false },
+          });
+        const bot = room.seats[room.game!.turn]!;
+        rooms.tick();
+        expect(spy).toHaveBeenCalledWith(
+          expect.any(Object), bot.bot, bot.difficulty,
+        );
+      } finally {
+        spy.mockRestore();
+      }
+      room.game!.phase = "finished";
+      room.seats[0]!.ready = false;
+      rooms.command(account.id, room.version, "next-round", { type: "ready" });
+      expect(room.game!.phase).toBe("bidding");
+      expect(rooms.project(room, account.id).seats.slice(1)).toMatchObject([
+        { name: "小云", bot: "cautious", difficulty: "gentle" },
+        { name: "破浪", bot: "balanced", difficulty: "fierce" },
+      ]);
+      for (let attempts = 0; room.game!.landlord < 0 && attempts < 15; attempts++) {
+        if (room.game!.turn === 0)
+          rooms.command(account.id, room.version, `bid-${attempts}`, {
+            type: "game", action: { type: "bid", yes: true },
+          });
+        else rooms.tick();
+      }
+      expect(room.game!.landlord).toBeGreaterThanOrEqual(0);
+      rooms.leave(room, account.id);
+      expect(store.getReplay(room.result!.replayId, account.id)).toMatchObject({
+        players: [
+          expect.any(Object),
+          { name: "小云", bot: "cautious", difficulty: "gentle" },
+          { name: "破浪", bot: "balanced", difficulty: "fierce" },
+        ],
+      });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("rejects malformed bot configurations without creating a room", () => {
+    const store = new Store(":memory:");
+    const account = store.createAccount("房主").account;
+    const rooms = new Rooms(store, () => {});
+    try {
+      const valid = { name: "听澜", difficulty: "gentle", personality: "bold" };
+      for (const bots of [
+        null, [], [valid], [valid, null], [valid, "bold"],
+        [{ ...valid, name: "\u0000bad" }, valid],
+        [{ ...valid, name: "太".repeat(17) }, valid],
+        [{ ...valid, name: 2 }, valid],
+        [{ ...valid, difficulty: "unknown" }, valid],
+        [{ ...valid, personality: "unknown" }, valid],
+        ["bold", "unknown"],
+      ]) {
+        expect(() => rooms.create(account, "standard", "pve", bots as BotConfig[])).toThrow();
+        expect(rooms.rooms.size).toBe(0);
+        expect(rooms.current(account.id)).toBeUndefined();
+      }
+    } finally {
+      store.close();
+    }
+  });
+
   it("lets only the host change supported stakes before play and clears human readiness", () => {
     const { store, accounts, room, rooms, send, start } = setup();
     try {
