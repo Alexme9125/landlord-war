@@ -1,4 +1,4 @@
-// Isolated CLI fixture: a legal 20-card landlord hand with a twelve-card bomb.
+// Isolated CLI fixtures: legal landlord hands with a twelve-card bomb and long pairs.
 // Uses the production server and engine without adding any HTTP test endpoint.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -64,12 +64,75 @@ command(2, { type: "game", action: { type: "bid", yes: false } });
 players.forEach((_, seat) =>
   command(seat, { type: "game", action: { type: "double", yes: false } }),
 );
+
+// A landlord can lead eighteen cards and still have two left. Fixed cards make
+// narrow-screen overflow reproducible instead of depending on a random AI deal.
+const longPlayers = ["一二三四五六七八九十一二三四五六", "听澜", "见山"].map(
+  (name) => application.store.createAccount(name),
+);
+longPlayers.forEach((p, i) =>
+  application.rooms.connect(p.account.id, `long-fixture-${i}`),
+);
+const longRoom = application.rooms.create(
+  longPlayers[0].account,
+  "heaven-earth",
+  "pvp",
+);
+longPlayers
+  .slice(1)
+  .forEach((p) => application.rooms.join(p.account, longRoom.code));
+const longCommand = (seat: number, action: RoomCommand) =>
+  application.rooms.command(
+    longPlayers[seat].account.id,
+    longRoom.version,
+    `long-fixture-${++serial}`,
+    action,
+  );
+longPlayers.forEach((_, seat) => longCommand(seat, { type: "ready" }));
+const pairs = all.filter(
+  (c) => c.rank >= 3 && c.rank <= 11 && ["S", "H"].includes(c.suit),
+);
+const longBottom = [
+  pairs.at(-1)!,
+  ...all.filter((c) => ["13S", "14S"].includes(c.id)),
+];
+const longFirst = pairs.slice(0, 17);
+const longRest = all.filter(
+  (c) =>
+    ![...longFirst, ...longBottom].some((selected) => selected.id === c.id),
+);
+longRoom.game = createGame(
+  "long-pairs-browser",
+  "heaven-earth",
+  [...longFirst, ...longRest, ...longBottom],
+  0,
+  9,
+  10,
+  7,
+);
+longCommand(0, { type: "game", action: { type: "bid", yes: true } });
+longCommand(1, { type: "game", action: { type: "bid", yes: false } });
+longCommand(2, { type: "game", action: { type: "bid", yes: false } });
+longPlayers.forEach((_, seat) =>
+  longCommand(seat, { type: "game", action: { type: "double", yes: false } }),
+);
+longCommand(0, {
+  type: "game",
+  action: {
+    type: "play",
+    cardIds: pairs.map((c) => c.id),
+    as: pairs.map((c) => c.rank),
+    kind: "pairChain",
+    main: 11,
+  },
+});
 mkdirSync(directory, { recursive: true });
 writeFileSync(
   resolve(directory, "heaven-fixture.json"),
   JSON.stringify({
     tokens: players.map((p) => p.token),
     selected: selected.map((c) => c.id),
+    longPlayTokens: longPlayers.map((p) => p.token),
   }),
 );
 application.http.listen(port, process.env.HOST ?? "127.0.0.1", () =>

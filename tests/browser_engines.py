@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
+from browser_layout import assert_no_overflow
 
 BASE=os.environ.get('GAME_URL','http://127.0.0.1:3181')
 OUT=Path(os.environ.get('SCREENSHOT_DIR','/tmp/landlord-screenshots'))
@@ -83,14 +84,14 @@ with sync_playwright() as p:
         expect(page.locator('.pause-time')).to_have_text(frozen)
         expect(page.get_by_role('button',name='提示',exact=True)).to_be_disabled()
         assert page.locator('.action-zone .pause-button').count()==0
-        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        assert_no_overflow(page, OUT/f'{name}-production-game')
         page.screenshot(path=str(OUT/f'{name}-production-game.png'),full_page=True)
         if mobile:
             page.set_viewport_size({'width':320,'height':780})
-            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+            assert_no_overflow(page, OUT/f'{name}-production-game-320')
             page.screenshot(path=str(OUT/f'{name}-production-game-320.png'),full_page=True)
             page.set_viewport_size({'width':844,'height':390})
-            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+            assert_no_overflow(page, OUT/f'{name}-production-landscape')
             assert page.locator('.hand').bounding_box()['y']+page.locator('.hand').bounding_box()['height']<=390
             page.screenshot(path=str(OUT/f'{name}-production-landscape.png'),full_page=True)
         resume=page.get_by_role('button',name='继续对局',exact=True)
