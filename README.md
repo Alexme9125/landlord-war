@@ -52,7 +52,7 @@ ORIGIN=http://127.0.0.1:3001 COOKIE_SECURE=false npm start
 - [验收记录与限制](docs/ACCEPTANCE.md)
 - [接口与代码结构](docs/ARCHITECTURE.md)
 
-每个 PR 和 `main` 的推送都会触发 GitHub Actions：Node.js 24 / 26 测试及构建，然后构建 Docker 生产镜像，在容器服务上验证 AI 改名与难度 / 流派设置、完整新难度对局、昵称同步、完整四癞子与天地癞子 PVE、标准与天地癞子四会话 PVP、暂停与恢复、十二张长炸以及 Chromium / WebKit / Firefox 交互。浏览器截图及容器日志随运行记录保存 7 天。
+每个 PR 和 `main` 的推送都会触发 GitHub Actions：Node.js 24 / 26 测试及构建，然后构建 Docker 生产镜像，在容器服务上验证 AI 改名与难度 / 流派设置、完整新难度对局、昵称同步、完整四癞子与天地癞子 PVE、标准与天地癞子四会话 PVP、暂停与恢复、十二张长炸、固定十八张连对的三种座位视角以及 Chromium / WebKit / Firefox 交互。浏览器截图及容器日志随运行记录保存 7 天；跨浏览器检查发生横向溢出时额外保存越界元素与尺寸。
 
 Python Playwright 浏览器脚本为可选验收工具，不是生产依赖：
 

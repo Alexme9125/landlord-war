@@ -86,7 +86,7 @@ jobs:
         run: |
           python tests/browser_smoke.py
           python tests/browser_pvp.py
-      - name: Twelve-card bomb across three player perspectives
+      - name: Twelve-card bomb and eighteen-card layout regression
         env:
           GAME_URL: http://127.0.0.1:3002
           HEAVEN_FIXTURE: /tmp/darwin-heaven-fixture.json
@@ -105,6 +105,7 @@ jobs:
           curl --fail --silent "$GAME_URL/api/health"
           docker cp darwin-heaven-fixture:/app/data/heaven-fixture.json "$HEAVEN_FIXTURE"
           python tests/browser_heaven_bomb.py
+          python tests/browser_long_play.py
       - name: Relief wrong-answer rotation and payment
         run: |
           docker exec darwin-ci node --import tsx tests/seed_relief.ts /app/data/game.sqlite > /tmp/darwin-relief.json

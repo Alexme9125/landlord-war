@@ -1395,7 +1395,9 @@ svg {
 }
 .played-cards {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  row-gap: 5px;
   padding-right: 24px;
 }
 .played-cards .small {

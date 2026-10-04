@@ -1,6 +1,6 @@
 # 验收记录
 
-日期：2026-10-04；下表保留前期回归验收结果，本次新增出牌暂停与恢复验证。环境：macOS arm64，本地独立浏览器上下文；Node.js 24.21.0 与开发环境 Node.js 26.3.1。
+日期：2026-10-04；下表保留前期回归验收结果，本次修复暂停验收暴露的长牌组溢出。环境：macOS arm64，本地独立浏览器上下文；Node.js 24.21.0 与开发环境 Node.js 26.3.1。
 
 ## 自动化
 
@@ -27,6 +27,7 @@ Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产�
 
 | 场景 | 结果 |
 | --- | --- |
+| 固定十八张连对：三浏览器 × 三种座位视角 × 320 / 390 / 844 / 1280px | 修复前可稳定复现左侧丢牌 / 右侧横向溢出；修复后全部通过，每张牌均处于牌组区域内，暂停和继续均正常 |
 | 出牌暂停：天地癞子 PVP 三玩家与观众、标准 PVE | 四端同步，剩余秒数冻结、禁止出牌与提示，恢复沿用剩余时间，选牌保留 |
 | 暂停后刷新、同账户新窗口、继续出牌 | 暂停状态和手牌恢复；只有暂停者能继续，无 JavaScript 错误 |
 | 暂停工具栏：深浅主题、1280 / 390 / 320px、844 × 390 横屏 | 顶部按钮与房间码无重叠，不占用出牌区；横屏提示缩成两行，底牌与倍数保持可见 |
@@ -55,7 +56,9 @@ Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产�
 | 十二张软炸：三种玩家视角、320px / 390px / 844px | 通过；全部纸牌处于视口内，HUD 从 ×15 同步到 ×90，明细显示 ×6，刷新后手牌与倍率保留 |
 | Chromium / WebKit / Firefox：第三模式、手动主题、刷新记忆 | 通过；移动端主页卡牌不遮挡底注，天 / 地标记与底注保持间距 |
 
-对应脚本：`tests/browser_pause.py`、`tests/browser_ai.py`、`tests/browser_nickname.py`、`tests/browser_smoke.py`、`tests/browser_pvp.py`、`tests/browser_engines.py`、`tests/browser_relief.py`、`tests/browser_heaven_bomb.py`。PVE / PVP 脚本支持 `GAME_MODE_LABEL=天地癞子`。使用真实界面与同源服务。救济脚本的零余额账户通过 `tests/seed_relief.ts` 在隔离测试数据库内预置；十二张炸弹通过 `tests/serve_heaven_fixture.ts` 独立 CLI 在隔离数据库内预置合法的 54 张牌，再通过正式界面与接口出牌。生产服务未增加测试接口。Tokens 重置通过玩家可用的正式流程验收。
+对应脚本：`tests/browser_long_play.py`、`tests/browser_pause.py`、`tests/browser_ai.py`、`tests/browser_nickname.py`、`tests/browser_smoke.py`、`tests/browser_pvp.py`、`tests/browser_engines.py`、`tests/browser_relief.py`、`tests/browser_heaven_bomb.py`。PVE / PVP 脚本支持 `GAME_MODE_LABEL=天地癞子`。使用真实界面与同源服务。救济脚本的零余额账户通过 `tests/seed_relief.ts` 在隔离测试数据库内预置；十二张炸弹与十八张连对通过 `tests/serve_heaven_fixture.ts` 独立 CLI 在隔离数据库内预置合法的 54 张牌。炸弹通过正式界面出牌，连对通过服务端规则引擎预先出牌，再检查全部玩家视角和界面暂停操作。生产服务未增加测试接口。Tokens 重置通过玩家可用的正式流程验收。
+
+PR #8 的检查通过后，主分支运行 `37201937151` 在 WebKit 390px 检查失败。本地复现为 AI 打出十八张连对，单行牌组越过所在区域，使页面宽度达到 419px；暂停状态本身同步正常。出牌区现按可用宽度换行，保持纸牌尺寸与顺序。新增固定连对牌面回归，不依赖随机发牌；仍严格检查页面宽度，并逐张检查边界，未隐藏溢出或放宽断言。`browser_layout.py` 在页面溢出时先保存截图和包含越界元素坐标的 JSON，再报告失败。
 
 完整对局脚本等待提示计算完成、操作按钮恢复后再出牌，避免固定毫秒延迟在较慢的 CI 运行器上跳过出牌。另在隔离本地服务将每次提示计算延迟 250 毫秒，完整天地癞子 PVE / PVP、结算与复盘均通过。
 
@@ -64,6 +67,8 @@ Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产�
 三种玩法固定种子、固定地主并交换阵营，每组 120 局。温和对恍惚 69 胜，凌厉对恍惚 75 胜，凌厉对温和 62 胜；属于有限样本观察。预算、战术夹具与复现方法见 [AI 策略与对照验证](AI.md)。
 
 ## 截图
+
+- [WebKit 390px 十八张连对](screenshots/long-play-webkit.png)
 
 - [桌面出牌暂停](screenshots/pause-desktop.png)
 - [320px 暂停与顶部继续按钮](screenshots/pause-mobile.png)
@@ -94,7 +99,7 @@ Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产�
 ## 验证边界
 
 - Docker、Docker Compose、Nginx 在本机不可用，本机没有启动这些组件。GitHub Actions 配置了 Linux Docker 构建、数据卷启动、三种模式的浏览器验收和独立长炸夹具，以对应提交的 CI 结果为准；Nginx 与实际 HTTPS 代理仍需部署时验收。
-- 本次出牌暂停改动未部署到服务器；本记录不验证当前公网版本、DNS、HTTPS 或跨公网延迟。
+- 本次长牌组布局修复未部署到服务器；本记录不验证当前公网版本、DNS、HTTPS 或跨公网延迟。
 - 手机覆盖来自浏览器视口及触摸模拟；WebKit 不是实体 iPhone Safari，未进行实体设备验收。
 - 首版为单实例熟人房间游戏，没有大规模并发负载测试。AI 是公开信息下的启发式与有限搜索策略，不承诺专业竞技水平。
 - 游客凭证绑定浏览器，清除浏览器数据无法找回；进行中的牌局不跨服务重启恢复。服务升级和停机备份应在没有进行中牌局时安排。

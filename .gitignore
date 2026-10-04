@@ -5,4 +5,5 @@ data/
 *.log
 coverage/
 test-results/
+__pycache__/
 .DS_Store
