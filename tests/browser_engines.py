@@ -38,10 +38,21 @@ with sync_playwright() as p:
                 spec=page.locator('.table-spec').bounding_box()
                 cards=page.locator('.hero-card').evaluate_all('(els)=>els.map(e=>e.getBoundingClientRect().toJSON())')
                 assert all(c['left']>=hero['x'] and c['right']<=hero['x']+hero['width'] and c['bottom']<=spec['y'] for c in cards), cards
+        ai_name=page.get_by_role('textbox',name='对手1名字',exact=True)
+        ai_name.fill('一二三四五六七八九十一二三四五六')
+        ai_name.press('Tab')
+        difficulty=page.get_by_role('group',name='对手1难度').get_by_role('button',name='凌厉',exact=True)
+        if mobile: difficulty.tap()
+        else: difficulty.click()
+        page.get_by_role('group',name='对手1流派').get_by_role('button',name='平衡',exact=True).click()
+        page.reload()
+        expect(ai_name).to_have_value('一二三四五六七八九十一二三四五六')
+        expect(difficulty).to_have_attribute('aria-pressed','true')
         page.screenshot(path=str(OUT/f'{name}-production-home.png'),full_page=True)
         page.get_by_role('button',name='开始练习',exact=True).click()
         expect(page.locator('.hand [data-card]').first).to_be_visible()
         expect(page.get_by_label('天地癞子点数')).to_be_visible()
+        expect(page.locator('.seat-ai-style').filter(has_text='凌厉 / 平衡')).to_be_visible()
         expect(page.locator('html')).to_have_attribute('data-theme','dark')
         card=page.locator('.hand [data-card]').first
         if mobile:

@@ -55,7 +55,7 @@ function amount(value: string, label: string): bigint {
   return BigInt(value);
 }
 
-function validName(name: string): string {
+export function validName(name: string): string {
   const trimmed = name.trim();
   if (
     Array.from(trimmed).length < 1 ||

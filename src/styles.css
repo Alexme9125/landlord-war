@@ -713,16 +713,101 @@ svg {
   color: var(--muted);
   margin-top: 5px;
 }
-.personality-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: 25px 0 22px;
+/* Opponent settings share the lobby's quiet glass and capsule controls. */
+.ai-opponents {
+  display: grid;
+  gap: 15px;
+  margin: 22px 0;
 }
-.personality-field {
+.ai-opponent + .ai-opponent {
+  border-top: 1px solid var(--line);
+  padding-top: 15px;
+}
+.ai-opponent-header {
   display: flex;
   align-items: center;
   gap: 9px;
+  margin-bottom: 11px;
+}
+.ai-name-field {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+  color: var(--muted);
+}
+.ai-name-field input {
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: 6px 1px;
+  width: 100%;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+.ai-name-field input:hover,
+.ai-name-field input:focus {
+  border-bottom-color: var(--accent);
+}
+.ai-name-field svg {
+  flex-shrink: 0;
+}
+.ai-opponent-label {
+  color: var(--faint);
+  font-size: 9px;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+.ai-choice-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+.ai-choice-row > span {
+  color: var(--muted);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.ai-capsules {
+  display: flex;
+  flex: 1;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--bg) 38%, transparent);
+}
+.ai-capsules button {
+  flex: 1;
+  padding: 6px 8px;
+  min-height: 30px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  border-radius: 20px;
+}
+.ai-capsules button:hover {
+  color: var(--ink);
+}
+.ai-capsules button[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--panel-solid);
+  box-shadow: 0 2px 8px var(--shadow);
+  font-weight: 600;
+}
+.ai-style-note {
+  margin: 9px 0 0;
+  font-size: 9px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.ai-style-note span {
+  color: var(--faint);
 }
 .small-avatar {
   display: flex;
@@ -741,22 +826,6 @@ svg {
   color: var(--gold);
   background: rgba(174, 151, 99, 0.11);
   border-color: rgba(174, 151, 99, 0.1);
-}
-.personality-name {
-  display: block;
-  font-size: 12px;
-}
-.personality-name small {
-  display: block;
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: 3px;
-}
-.personality-field select {
-  margin-left: auto;
-  font-size: 11px;
-  padding: 7px 5px;
-  width: 65px;
 }
 .primary-button,
 .secondary-button {
@@ -2128,10 +2197,6 @@ svg {
     padding-top: 35px;
     padding-bottom: 33px;
   }
-  .personality-fields {
-    margin-top: 30px;
-    margin-bottom: 25px;
-  }
   .friends-section {
     margin-top: 30px;
     padding-top: 28px;
@@ -2281,16 +2346,6 @@ svg {
   }
   .section-heading {
     gap: 10px;
-  }
-  .personality-name small {
-    font-size: 9px;
-  }
-  .personality-field {
-    gap: 7px;
-  }
-  .personality-field select {
-    width: 60px;
-    font-size: 10px;
   }
   .lobby-footer {
     font-size: 9px;
@@ -2555,23 +2610,6 @@ svg {
   }
   .section-heading p {
     font-size: 11px;
-  }
-  .personality-name {
-    font-size: 12px;
-  }
-  .personality-name small {
-    font-size: 10px;
-  }
-  .personality-field select {
-    font-size: 12px;
-    width: 83px;
-    padding: 9px;
-  }
-  .personality-fields {
-    margin: 24px 0;
-  }
-  .personality-field {
-    gap: 12px;
   }
   .small-avatar {
     width: 34px;
@@ -3704,5 +3742,40 @@ svg {
 @media (prefers-reduced-motion: reduce) {
   .hand .playing-card.from-bottom {
     animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .ai-capsules button {
+    min-height: 36px;
+    font-size: 12px;
+  }
+  .ai-name-field input {
+    font-size: 16px;
+  }
+  .ai-style-note {
+    font-size: 10px;
+  }
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 600px) {
+  .seat-ai-style {
+    display: block;
+    font-size: 8px;
+    margin-top: 2px;
+  }
+  .seat-caption-dot {
+    display: none;
   }
 }

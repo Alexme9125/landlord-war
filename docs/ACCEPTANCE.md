@@ -1,12 +1,13 @@
 # 验收记录
 
-日期：2026-09-30。环境：macOS arm64，本地独立浏览器上下文；Node.js 24.21.0 与开发环境 Node.js 26.3.1。
+日期：2026-10-04；下表保留前期回归验收结果，本次新增 AI 难度及配置验证。环境：macOS arm64，本地独立浏览器上下文；Node.js 24.21.0 与开发环境 Node.js 26.3.1。
 
 ## 自动化
 
-`npm test`：8 个测试文件、116 项测试通过。覆盖：
+`npm test`：10 个测试文件、129 项测试通过。覆盖：
 
 - 全部牌型、癞子明确解释、软硬炸等级、带牌限制、底牌最高奖励、叫抢与重发、个人加倍隐私、春天 / 反春天、随机完整对局与牌数守恒。
+- 三难度 × 三流派 × 三玩法的合法动作、原恍惚兼容、公开底牌采样与暗牌交换不影响输入、拆牌规划、控牌收尾、独立完整搜索验证的残局、配置边界、下一局和回放保留。
 - 三种 AI 人格的合法动作和实际策略差异、公开信息采样、农民配合、候选超过搜索上限时仍优先找直接出完的手牌。
 - 超大整数倍率、余额不足按比例分账、实际收支守恒、重复结算幂等、救济过期与重复领取、账户重新打开后持久化、回放访问权限。
 - 三玩家加观众、站起 / 坐下、版本过期和重复动作、隐私投影、断线暂停 / 恢复 / 超时、观众离开不中断、退出判负、重启后旧房间清空。
@@ -25,6 +26,8 @@ Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产�
 
 | 场景 | 结果 |
 | --- | --- |
+| AI 配置：独立改名、18 种难度 / 流派组合操作、刷新、空名字恢复、键盘 / 触屏 | 通过，320 / 390 / 1440px 深浅主题截图检查 |
+| AI 对局：凌厉＋温和参与完整天地癞子 | 完成结算，名字与难度 / 流派一致，无 JavaScript 错误 |
 | Chromium：浅 / 深主页、等待房间、牌桌 | 已截图检查 |
 | Chromium：完整癞子 PVE → 结算 → 逐手复盘 | 通过，无 JavaScript 运行错误 |
 | 四个隔离 Chromium 会话：三人标准 PVP + 一观众 | 完成真实对局，四端实际结算相同 |
@@ -47,11 +50,19 @@ Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产�
 | 十二张软炸：三种玩家视角、320px / 390px / 844px | 通过；全部纸牌处于视口内，HUD 从 ×15 同步到 ×90，明细显示 ×6，刷新后手牌与倍率保留 |
 | Chromium / WebKit / Firefox：第三模式、手动主题、刷新记忆 | 通过；移动端主页卡牌不遮挡底注，天 / 地标记与底注保持间距 |
 
-对应脚本：`tests/browser_nickname.py`、`tests/browser_smoke.py`、`tests/browser_pvp.py`、`tests/browser_engines.py`、`tests/browser_relief.py`、`tests/browser_heaven_bomb.py`。PVE / PVP 脚本支持 `GAME_MODE_LABEL=天地癞子`。使用真实界面与同源服务。救济脚本的零余额账户通过 `tests/seed_relief.ts` 在隔离测试数据库内预置；十二张炸弹通过 `tests/serve_heaven_fixture.ts` 独立 CLI 在隔离数据库内预置合法的 54 张牌，再通过正式界面与接口出牌。生产服务未增加测试接口。Tokens 重置通过玩家可用的正式流程验收。
+对应脚本：`tests/browser_ai.py`、`tests/browser_nickname.py`、`tests/browser_smoke.py`、`tests/browser_pvp.py`、`tests/browser_engines.py`、`tests/browser_relief.py`、`tests/browser_heaven_bomb.py`。PVE / PVP 脚本支持 `GAME_MODE_LABEL=天地癞子`。使用真实界面与同源服务。救济脚本的零余额账户通过 `tests/seed_relief.ts` 在隔离测试数据库内预置；十二张炸弹通过 `tests/serve_heaven_fixture.ts` 独立 CLI 在隔离数据库内预置合法的 54 张牌，再通过正式界面与接口出牌。生产服务未增加测试接口。Tokens 重置通过玩家可用的正式流程验收。
 
 完整对局脚本等待提示计算完成、操作按钮恢复后再出牌，避免固定毫秒延迟在较慢的 CI 运行器上跳过出牌。另在隔离本地服务将每次提示计算延迟 250 毫秒，完整天地癞子 PVE / PVP、结算与复盘均通过。
 
+## 本次 AI 对照
+
+三种玩法固定种子、固定地主并交换阵营，每组 120 局。温和对恍惚 69 胜，凌厉对恍惚 75 胜，凌厉对温和 62 胜；属于有限样本观察。预算、战术夹具与复现方法见 [AI 策略与对照验证](AI.md)。
+
 ## 截图
+
+- [新 AI 配置桌面主页](screenshots/ai-home-desktop.png)
+- [320px 新 AI 配置](screenshots/ai-home-mobile.png)
+- [320px AI 名称和难度](screenshots/ai-room-mobile.png)
 
 - [浅色主界面](screenshots/home-light.png)
 - [深色主界面](screenshots/home-dark.png)
@@ -74,7 +85,7 @@ Node 24.21.0 和 Node 26.3.1 下的 TypeScript 检查、Vitest 和 Vite 生产�
 ## 验证边界
 
 - Docker、Docker Compose、Nginx 在本机不可用，本机没有启动这些组件。GitHub Actions 配置了 Linux Docker 构建、数据卷启动、三种模式的浏览器验收和独立长炸夹具，以对应提交的 CI 结果为准；Nginx 与实际 HTTPS 代理仍需部署时验收。
-- 本次天地癞子改动未部署到服务器；本记录不验证当前公网版本、DNS、HTTPS 或跨公网延迟。
+- 本次 AI 难度改动未部署到服务器；本记录不验证当前公网版本、DNS、HTTPS 或跨公网延迟。
 - 手机覆盖来自浏览器视口及触摸模拟；WebKit 不是实体 iPhone Safari，未进行实体设备验收。
 - 首版为单实例熟人房间游戏，没有大规模并发负载测试。AI 是公开信息下的启发式与有限搜索策略，不承诺专业竞技水平。
 - 游客凭证绑定浏览器，清除浏览器数据无法找回；进行中的牌局不跨服务重启恢复。服务升级和停机备份应在没有进行中牌局时安排。

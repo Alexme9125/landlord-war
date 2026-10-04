@@ -2,9 +2,11 @@ import { randomInt, randomUUID } from "node:crypto";
 import { deck, gameWildRanks } from "../shared/cards.ts";
 import { createGame, applyAction, forfeit } from "../shared/engine.ts";
 import { playName } from "../shared/rules.ts";
-import { parseBaseStake, type BaseStake } from "../shared/types.ts";
+import { DEFAULT_BOTS, parseBaseStake, type BaseStake } from "../shared/types.ts";
 import type {
   Account,
+  BotConfig,
+  Difficulty,
   GameAction,
   GameState,
   Mode,
@@ -14,7 +16,7 @@ import type {
   RoomCommand,
   RoomView,
 } from "../shared/types.ts";
-import { Store } from "./store.ts";
+import { Store, validName } from "./store.ts";
 import { chooseAction, type AiObservation } from "./ai.ts";
 
 type Seat = {
@@ -22,6 +24,7 @@ type Seat = {
   name: string;
   ready: boolean;
   bot?: Personality;
+  difficulty?: Difficulty;
   balance: string;
 };
 export interface Room {
@@ -54,6 +57,38 @@ function shuffled() {
     [cards[i], cards[j]] = [cards[j], cards[i]];
   }
   return cards;
+}
+const personalities: readonly Personality[] = ["cautious", "balanced", "bold"];
+const difficulties: readonly Difficulty[] = ["dazed", "gentle", "fierce"];
+function normalizeBots(input: unknown): BotConfig[] {
+  if (!Array.isArray(input) || input.length !== 2)
+    throw new Error("请配置两名机器人");
+  if (input.every((value) => typeof value === "string")) {
+    if (input.some((value) => !personalities.includes(value as Personality)))
+      throw new Error("人格无效");
+    return input.map((personality, index) => ({
+      name: DEFAULT_BOTS[index].name,
+      difficulty: "dazed",
+      personality: personality as Personality,
+    }));
+  }
+  return input.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("机器人配置无效");
+    const { name, difficulty, personality } = value as Record<string, unknown>;
+    if (typeof name !== "string")
+      throw new Error("昵称须为1到16个字符，且不能包含控制字符");
+    const selectedName = validName(name);
+    if (!difficulties.includes(difficulty as Difficulty))
+      throw new Error("机器人难度无效");
+    if (!personalities.includes(personality as Personality))
+      throw new Error("人格无效");
+    return {
+      name: selectedName,
+      difficulty: difficulty as Difficulty,
+      personality: personality as Personality,
+    };
+  });
 }
 function newGame(room: Room, id: string, first: number) {
   const wildRank = room.mode === "standard" ? null : randomInt(3, 16);
@@ -135,10 +170,11 @@ export class Rooms {
     account: Account,
     mode: Mode,
     kind: "pve" | "pvp",
-    personalities: Personality[] = ["cautious", "bold"],
+    bots: Personality[] | BotConfig[] = ["cautious", "bold"],
     baseStake: BaseStake = 10,
   ) {
     baseStake = parseBaseStake(baseStake);
+    const selectedBots = normalizeBots(bots);
     if (this.current(account.id)) throw new Error("请先离开当前房间");
     if (BigInt(account.balance) === 0n)
       throw new Error("Tokens 已用完，请先领取救济");
@@ -170,9 +206,10 @@ export class Rooms {
       for (let i = 1; i < 3; i++)
         room.seats[i] = {
           id: `bot-${randomUUID()}`,
-          name: i === 1 ? "听澜" : "见山",
+          name: selectedBots[i - 1].name,
           ready: true,
-          bot: personalities[i - 1],
+          bot: selectedBots[i - 1].personality,
+          difficulty: selectedBots[i - 1].difficulty,
           balance: "100000",
         };
     this.rooms.set(code, room);
@@ -453,6 +490,7 @@ export class Rooms {
                 const decision = chooseAction(
                   this.observation(room, i),
                   room.seats[i]!.bot!,
+                  room.seats[i]!.difficulty ?? "dazed",
                 );
                 this.act(room, i, decision.action, decision.explanation);
               }
@@ -468,6 +506,7 @@ export class Rooms {
           const decision = chooseAction(
             this.observation(room, g.turn),
             room.seats[g.turn]!.bot!,
+            room.seats[g.turn]!.difficulty ?? "dazed",
           );
           this.act(room, g.turn, decision.action, decision.explanation);
         } else if (room.deadline && now >= room.deadline) {
@@ -522,6 +561,7 @@ export class Rooms {
               ready: s.ready,
               connected: !!s.bot || this.connected(s.id),
               bot: s.bot,
+              difficulty: s.difficulty,
               count: g?.hands[i].length ?? 0,
               doubled:
                 hiddenDouble && i !== mySeat ? null : (g?.doubles[i] ?? null),
