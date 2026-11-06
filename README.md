@@ -1,81 +1,56 @@
-# Darwin斗地主
+# ![Darwin斗地主](docs/branding/readme-banner.webp)
 
-可部署的三人斗地主：标准 / 四癞子 / 天地癞子、PVE / 房间码 PVP、独立浅色 / 深色主题。规则参考欢乐斗地主公开资料，并采用本项目明确约定的底牌倍率与带牌规则。
+在浏览器里打三人斗地主。一个人可以和两位 AI 开局，和朋友玩时用六位房间码入座。
+
+## 怎么玩
+
+- **选玩法**。支持标准、四癞子和天地癞子。天地癞子在叫地主前亮出天癞子，确定地主后再亮出地癞子，可打出最多十二张牌的长炸。[查看完整规则](docs/RULES.md)
+- **和 AI 打**。两位 AI 的昵称、难度和流派可以分别设置。AI 根据自己的手牌和牌桌上的公开信息出牌。[查看 AI 策略](docs/AI.md)
+- **开好友房**。三人准备后自动开局，满座后可观战。轮到自己出牌时可以暂停整桌，由暂停的人继续。断线后有 60 秒重连时间。
+- **复盘牌局**。赛后可以查看全桌手牌、逐手回放和倍率明细。首页保留最近 20 局。
+
+底注可选 10、20 或 50 Tokens。余额用完可以答题领取 10 KTokens，也可以在首页重置余额。
+
+牌桌支持浅色和深色主题，手机竖屏时手牌分两排，横屏时排成一行。[桌面牌桌](docs/screenshots/table-desktop.png) · [手机牌桌](docs/screenshots/table-mobile.png)
 
 ## 本地运行
 
-需要 Node.js 24 或更新版本。
+安装 Node.js 24 或更新版本，在项目根目录运行。
 
 ```sh
 npm ci
 npm run dev
 ```
 
-打开 `http://127.0.0.1:5173`。默认 API 为 3001，开发服务器转发 API 与 Socket.IO。端口冲突时可以指定：
+打开 <http://127.0.0.1:5173>。Vite 将 API 和 Socket.IO 请求转发到本机 3001 端口。如需换端口，可同时设置后端端口、Vite 端口和浏览器来源。
 
 ```sh
 PORT=3171 VITE_PORT=5187 ORIGIN=http://127.0.0.1:5187 npm run dev
 ```
 
-`ORIGIN` 必须与浏览器地址完全一致（协议、主机和端口）；不要在 `localhost` 和 `127.0.0.1` 之间混用。开发模式请设置 `COOKIE_SECURE=false` 或不设置该项。
+`ORIGIN` 要与浏览器地址的协议、主机名和端口一致。本机使用 HTTP 时可设置 `COOKIE_SECURE=false`。
+
+## 部署
+
+安装依赖后，可构建并在本机启动由 Express 提供的单端口服务。
 
 ```sh
-npm test
 npm run build
 ORIGIN=http://127.0.0.1:3001 COOKIE_SECURE=false npm start
 ```
 
-最后一行启动构建后的同源网页服务。生产环境配置 `NODE_ENV=production`，`ORIGIN` 必填；公网 HTTPS 设置 `COOKIE_SECURE=true`。`npm start` 不自动读取 `.env`，Docker Compose 会读取；直接运行时请显式导出环境变量。
+公开部署可使用仓库自带的 Docker Compose 和 Nginx 示例。将 `ORIGIN` 设为玩家实际访问的 HTTPS 来源，并启用 `COOKIE_SECURE=true`。直接启动生产服务时设置 `NODE_ENV=production`，并通过环境变量提供配置。Compose 会读取 `.env`。
 
-## 已实现
+SQLite 保存余额和已结算的对局，服务重启会结束尚未结算的牌局。[部署与备份说明](docs/DEPLOYMENT.md) · [接口与代码结构](docs/ARCHITECTURE.md)
 
-- 现代纸牌、液态玻璃牌桌、浅深主题；手机竖屏双排、横屏单排手牌，点击 / 拖动选牌、取消、键盘操作及减少动态效果。
-- 主题仅手动切换并记住选择；首次默认浅色，切换任意玩法或加入房间均保留当前主题。
-- 标准、四癞子与天地癞子共用规则引擎。服务器校验牌权、物理手牌、牌型、癞子解释和倍率，客户端不能指定胜负或余额。
-- 天地癞子：叫地主前公开天癞子，定地主后公开地癞子；支持八张癞子和最多十二张长炸，四张纯癞子炸与混合癞子炸分别分级。手牌、底牌、出牌、倍率账目和复盘均显示相应标记。
-- 两名 AI 可分别改名、选择恍惚 / 温和 / 凌厉难度与谨慎 / 平衡 / 激进流派；胶囊按钮即时选择，偏好保存在当前浏览器，默认温和。恍惚保留原策略，温和增加整手拆牌规划、控牌与配合，凌厉进一步推演后续应对及残局。所有难度仅使用自己的手牌和公开信息。见 [AI 策略与对照验证](docs/AI.md)。
-- 六位房间码、三人全部准备自动开局；满座加入为观众，非游戏期间可站起 / 坐下，房主离开自动移交。首版不做大厅匹配、账户注册或跨设备找回。
-- 主界面与房间底部均可直接编辑昵称，支持对局中修改；新昵称实时同步给同房玩家、观众及同账户的其他窗口。改名保留账户、余额和座位，已结束对局的回放保留结算时的名字。
-- 对局中离开判所属阵营负；断线暂停 60 秒，可重连恢复。观众离开不影响对局。服务器重启的未完成对局作废，已经完成的结算持久保存。
-- PVE / PVP 出牌阶段，当前玩家可用牌桌顶部的暂停按钮暂离。全桌计时与行动冻结，由暂停者继续原剩余时间；观众同步可见，刷新不自动继续。断线 60 秒保留与主动退出规则仍适用。
-- 首次 100 KTokens、底注通过 10 / 20 / 50 分段按钮选择（默认 10）、公共倍数 15 起，不设倍率上限；PVP 房主可在开局前修改底注，修改后需重新准备。余额不透支，实际扣款等于实际奖励。破产答题领取 10 KTokens，答错自动换题，每次破产都可领取。
-- 主界面 Tokens 旁提供环形双箭头重置按钮，经两次确认后将余额设为 100 KTokens，同步同账户的其他窗口；保留昵称和战绩。房间内不可重置。
-- 公开信息提示、倍率明细、独立个人倍率、最近 20 局、赛后全牌逐手复盘与 AI 决策解释。
+## 验证
 
-## 部署
+本地运行 `npm test` 和 `npm run build`。每个 PR 和 `main` 的推送都会触发 CI，在 Node.js 24 和 26 上测试和构建，再用 Docker 生产镜像验证单人和联机对局，以及 Chromium、WebKit 和 Firefox 上的交互。
 
-见 [部署与备份说明](docs/DEPLOYMENT.md)。提供单实例 Docker Compose、SQLite 数据卷、Nginx HTTPS / WebSocket 示例和备份脚本。没有内置域名、证书或外部账号依赖。
+验收记录附有测试脚本、截图和覆盖范围。浏览器脚本会创建游客与测试战绩，运行时请用独立的 `DATA_DIR`。[验收记录](docs/ACCEPTANCE.md) · [GitHub Actions](https://github.com/Alexme9125/landlord-war/actions/workflows/ci.yml)
 
-## 规则和验证
+## 关于
 
-- [完整项目规则](docs/RULES.md)
-- [验收记录与限制](docs/ACCEPTANCE.md)
-- [接口与代码结构](docs/ARCHITECTURE.md)
+项目作者为 Alex Xiao。OpenAI 的 Codex 参与项目实现。本项目采用 Vibe Coding，ChatGPT 协助代码编写与改进。[Codex](https://github.com/codex)
 
-每个 PR 和 `main` 的推送都会触发 GitHub Actions：Node.js 24 / 26 测试及构建，然后构建 Docker 生产镜像，在容器服务上验证 AI 改名与难度 / 流派设置、完整新难度对局、昵称同步、完整四癞子与天地癞子 PVE、标准与天地癞子四会话 PVP、暂停与恢复、十二张长炸、固定十八张连对的三种座位视角以及 Chromium / WebKit / Firefox 交互。浏览器截图及容器日志随运行记录保存 7 天；跨浏览器检查发生横向溢出时额外保存越界元素与尺寸。
-
-Python Playwright 浏览器脚本为可选验收工具，不是生产依赖：
-
-```sh
-python3 -m pip install -r tests/requirements.txt
-python3 -m playwright install chromium firefox webkit
-GAME_URL=http://127.0.0.1:5173 python3 tests/browser_ai.py
-GAME_URL=http://127.0.0.1:5173 python3 tests/browser_nickname.py
-GAME_URL=http://127.0.0.1:5173 python3 tests/browser_smoke.py
-GAME_URL=http://127.0.0.1:5173 python3 tests/browser_pvp.py
-GAME_URL=http://127.0.0.1:5173 python3 tests/browser_pause.py
-GAME_URL=http://127.0.0.1:5173 GAME_MODE_LABEL=天地癞子 python3 tests/browser_smoke.py
-GAME_URL=http://127.0.0.1:5173 GAME_MODE_LABEL=天地癞子 python3 tests/browser_pvp.py
-GAME_URL=http://127.0.0.1:5173 python3 tests/browser_engines.py
-```
-
-浏览器脚本创建独立游客，会产生真实测试战绩；请在测试数据目录中运行。SQLite 默认写入 `data/game.sqlite`，可用 `DATA_DIR` 指定独立目录。不要把生产数据提交到 Git。
-
-## 贡献者
-
-- Alex Xiao：项目作者。
-- [Codex](https://github.com/codex)（OpenAI）：参与项目实现。
-
-## Vibe Coding 声明
-
-本项目在开发过程中采用 Vibe Coding，ChatGPT 参与了实现过程，协助代码编写与改进。
+[MIT 许可证](LICENSE) · [项目图标（PNG）](docs/branding/logo.png)
