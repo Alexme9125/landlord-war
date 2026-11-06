@@ -70,3 +70,12 @@ GAME_URL=http://127.0.0.1:5173 python3 tests/browser_engines.py
 ```
 
 浏览器脚本创建独立游客，会产生真实测试战绩；请在测试数据目录中运行。SQLite 默认写入 `data/game.sqlite`，可用 `DATA_DIR` 指定独立目录。不要把生产数据提交到 Git。
+
+## 贡献者
+
+- Alex Xiao：项目作者。
+- [Codex](https://github.com/codex)（OpenAI）：参与项目实现。
+
+## Vibe Coding 声明
+
+本项目在开发过程中采用 Vibe Coding，ChatGPT 参与了实现过程，协助代码编写与改进。
