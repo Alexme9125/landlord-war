@@ -1,56 +1,85 @@
-# ![Darwin斗地主](docs/branding/readme-banner.webp)
+**English** | [简体中文](README.zh-CN.md)
 
-在浏览器里打三人斗地主。一个人可以和两位 AI 开局，和朋友玩时用六位房间码入座。
+![Darwin Landlord](docs/branding/readme-banner.webp)
 
-## 怎么玩
+# Darwin Landlord
 
-- **选玩法**。支持标准、四癞子和天地癞子。天地癞子在叫地主前亮出天癞子，确定地主后再亮出地癞子，可打出最多十二张牌的长炸。[查看完整规则](docs/RULES.md)
-- **和 AI 打**。两位 AI 的昵称、难度和流派可以分别设置。AI 根据自己的手牌和牌桌上的公开信息出牌。[查看 AI 策略](docs/AI.md)
-- **开好友房**。三人准备后自动开局，满座后可观战。轮到自己出牌时可以暂停整桌，由暂停的人继续。断线后有 60 秒重连时间。
-- **复盘牌局**。赛后可以查看全桌手牌、逐手回放和倍率明细。首页保留最近 20 局。
+A browser-based three-player Dou Dizhu card game. Play solo against two AI bots or join friends with a six-character room code. The frontend uses React 19 and Vite, while the server runs on Express 5, Socket.IO 4, and Node.js built-in SQLite. The web interface is in Chinese.
 
-底注可选 10、20 或 50 Tokens。余额用完可以答题领取 10 KTokens，也可以在首页重置余额。
+You can play Standard, Four-Wildcard, or Heaven-Earth Wildcard. Heaven-Earth mode reveals a Heaven wildcard before bidding and an Earth wildcard after bidding settles the landlord, with bombs up to 12 cards. In solo play, each AI bot has its own nickname, difficulty (`恍惚` Dazed, `温和` Gentle, or `凌厉` Fierce), and playstyle (`谨慎` Cautious, `平衡` Balanced, or `激进` Bold). Multiplayer rooms start automatically once three players are ready, and extra visitors join as spectators. During play, the active player can pause the turn clock, while disconnected players have 60 seconds to reconnect.
 
-牌桌支持浅色和深色主题，手机竖屏时手牌分两排，横屏时排成一行。[桌面牌桌](docs/screenshots/table-desktop.png) · [手机牌桌](docs/screenshots/table-mobile.png)
+New accounts start with 100 KTokens and can play at 10, 20, or 50 Token base stakes. When your balance hits zero, you can answer an addition question for 10 KTokens or reset your balance to 100 KTokens on the home screen. Recent history keeps the last 20 finished games with full-hand step-by-step replays. Both light and dark themes work across desktop and mobile layouts ([Desktop table](docs/screenshots/table-desktop.png) · [Mobile table](docs/screenshots/table-mobile.png)).
 
-## 本地运行
+## Local development
 
-安装 Node.js 24 或更新版本，在项目根目录运行。
+Install Node.js 24 or later.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-打开 <http://127.0.0.1:5173>。Vite 将 API 和 Socket.IO 请求转发到本机 3001 端口。如需换端口，可同时设置后端端口、Vite 端口和浏览器来源。
+Open <http://127.0.0.1:5173>. The Vite dev server forwards `/api` and `/socket.io` traffic to `127.0.0.1:3001`.
+
+To change the default ports, pass `PORT`, `VITE_PORT`, and `ORIGIN` together.
 
 ```sh
 PORT=3171 VITE_PORT=5187 ORIGIN=http://127.0.0.1:5187 npm run dev
 ```
 
-`ORIGIN` 要与浏览器地址的协议、主机名和端口一致。本机使用 HTTP 时可设置 `COOKIE_SECURE=false`。
+`ORIGIN` must match the exact URL in the browser address bar. Do not mix `localhost` and `127.0.0.1`.
 
-## 部署
+## Deployment
 
-安装依赖后，可构建并在本机启动由 Express 提供的单端口服务。
+### Direct Node.js process
+
+Build the frontend first. A single Node.js process then serves the static files and the API/Socket.IO endpoints on one port.
 
 ```sh
 npm run build
 ORIGIN=http://127.0.0.1:3001 COOKIE_SECURE=false npm start
 ```
 
-公开部署可使用仓库自带的 Docker Compose 和 Nginx 示例。将 `ORIGIN` 设为玩家实际访问的 HTTPS 来源，并启用 `COOKIE_SECURE=true`。直接启动生产服务时设置 `NODE_ENV=production`，并通过环境变量提供配置。Compose 会读取 `.env`。
+`ORIGIN` is required when `NODE_ENV=production`. `npm start` does not load `.env` automatically, so export environment variables before starting the process.
 
-SQLite 保存余额和已结算的对局，服务重启会结束尚未结算的牌局。[部署与备份说明](docs/DEPLOYMENT.md) · [接口与代码结构](docs/ARCHITECTURE.md)
+### Docker Compose
 
-## 验证
+```sh
+cp .env.example .env
+# Set ORIGIN in .env to your public HTTPS origin, e.g. https://game.example.com
+docker compose up -d --build
+```
 
-本地运行 `npm test` 和 `npm run build`。每个 PR 和 `main` 的推送都会触发 CI，在 Node.js 24 和 26 上测试和构建，再用 Docker 生产镜像验证单人和联机对局，以及 Chromium、WebKit 和 Firefox 上的交互。
+The container binds to `127.0.0.1:3001` on the host and stores the SQLite database in the `landlord-war-data` Docker volume. For public HTTPS access, place a reverse proxy with WebSocket upgrade support in front of the port; see [`deploy/nginx.conf`](deploy/nginx.conf) for a sample Nginx config and [`deploy/backup.sh`](deploy/backup.sh) to back up the volume. Restarting the server ends any unfinished matches in memory.
 
-验收记录附有测试脚本、截图和覆盖范围。浏览器脚本会创建游客与测试战绩，运行时请用独立的 `DATA_DIR`。[验收记录](docs/ACCEPTANCE.md) · [GitHub Actions](https://github.com/Alexme9125/landlord-war/actions/workflows/ci.yml)
+### Environment variables
 
-## 关于
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3001` | HTTP and Socket.IO listen port |
+| `HOST` | `0.0.0.0` | Bind address |
+| `ORIGIN` | Localhost origins in dev | Exact browser origin (e.g. `https://game.example.com`), required when `NODE_ENV=production` |
+| `COOKIE_SECURE` | `true` in production | Sends the session cookie over HTTPS only when `true`; set `false` for local HTTP testing |
+| `DATA_DIR` | `data` | Directory for the `game.sqlite` database file |
 
-项目作者为 Alex Xiao。OpenAI 的 Codex 参与项目实现。本项目采用 Vibe Coding，ChatGPT 协助代码编写与改进。[Codex](https://github.com/codex)
+## Testing and documentation
 
-[MIT 许可证](LICENSE) · [项目图标（PNG）](docs/branding/logo.png)
+```sh
+npm test        # Vitest unit and integration tests
+npm run check   # TypeScript type check
+npm run build   # Type check and production build
+```
+
+The guides in `docs/` are in Chinese.
+
+- [Game rules](docs/RULES.md)
+- [AI difficulty and styles](docs/AI.md)
+- [Deployment and backup](docs/DEPLOYMENT.md)
+- [Architecture and API](docs/ARCHITECTURE.md)
+- [Acceptance test log](docs/ACCEPTANCE.md)
+
+## About
+
+Created by Alex Xiao, with implementation assistance from OpenAI [Codex](https://github.com/codex) and ChatGPT (Vibe Coding).
+
+[MIT License](LICENSE) · [Project logo](docs/branding/logo.png)
